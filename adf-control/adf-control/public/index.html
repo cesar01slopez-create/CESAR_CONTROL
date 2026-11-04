@@ -1,477 +1,387 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ADF Control</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FLOTAS - Validaciones Geotab y AT&T</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script>tailwind.config={theme:{extend:{colors:{brandOrange:'#f97316',brandBlueDark:'#0b192c'}}}}</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<style>
-  body{background:#f1f5f9;color:#0f172a}
-  .card{background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:16px}
-  .inp{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:9px 11px;font-size:15px;background:#fff}
-  .inp:focus{outline:2px solid #00A9E0;border-color:#00A9E0}
-  label.l{display:block;font-size:12px;color:#475569;margin:10px 0 3px;font-weight:600}
-  .btn{background:#00A9E0;color:#fff;border-radius:10px;padding:9px 16px;font-weight:600;font-size:14px;cursor:pointer;border:0}
-  .btn:hover{background:#0090c0}.btn:disabled{opacity:.5;cursor:wait}
-  .btn2{background:#e2e8f0;color:#0f172a}.btn2:hover{background:#cbd5e1}
-  .btnr{background:#dc2626}.btnr:hover{background:#b91c1c}
-  .btns{padding:5px 10px;font-size:12px;border-radius:8px}
-  .tab{white-space:nowrap;padding:10px 14px;font-size:14px;font-weight:600;color:#475569;border-bottom:3px solid transparent;cursor:pointer}
-  .tab.on{color:#00A9E0;border-color:#00A9E0}
-  .chip{padding:5px 12px;border-radius:999px;background:#e2e8f0;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
-  .chip.on{background:#00A9E0;color:#fff}
-  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th{text-align:left;font-size:12px;color:#475569;padding:8px;border-bottom:2px solid #e2e8f0;white-space:nowrap}
-  td{padding:8px;border-bottom:1px solid #f1f5f9;vertical-align:top}
-  .wrap{overflow-x:auto}
-  canvas.sig{width:100%;height:140px;border:1px dashed #94a3b8;border-radius:10px;background:#fff;touch-action:none}
-  .modalbg{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:14px;z-index:50}
-  .modal{background:#fff;border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:18px}
-  .tabs{overflow-x:auto;display:flex;background:#fff;border-bottom:1px solid #e2e8f0}
-</style>
+<style>canvas{touch-action:none}.inp{width:100%;padding:.55rem 1rem;border:1px solid #cbd5e1;border-radius:.5rem;font-size:.875rem;background:#fff}.inp:focus{outline:2px solid #f97316;outline-offset:0}.lbl{display:block;font-size:.75rem;font-weight:600;color:#475569;margin-bottom:.25rem}</style>
 </head>
-<body>
-<div id="toast" class="fixed top-3 left-1/2 -translate-x-1/2 z-[60] hidden px-4 py-2 rounded-lg text-white text-sm shadow-lg"></div>
+<body class="bg-slate-100 text-slate-800 min-h-screen font-sans">
 
 <!-- LOGIN -->
-<div id="login" class="min-h-screen flex items-center justify-center p-4 hidden">
-  <form id="fLogin" class="card w-full max-w-sm">
-    <div class="text-center mb-3">
-      <img src="logo-att.png" onerror="this.style.display='none'" class="h-12 mx-auto mb-2" alt="">
-      <h1 class="text-xl font-bold app-name">ADF Control</h1>
-      <p class="text-sm text-slate-500">Validación de servicios y seguimiento de la flota</p>
-    </div>
-    <label class="l">Usuario</label><input id="lu" class="inp" autocapitalize="none" autocomplete="username" required>
-    <label class="l">Contraseña</label><input id="lp" type="password" class="inp" autocomplete="current-password" required>
-    <p id="lerr" class="text-red-600 text-sm mt-2"></p>
-    <button class="btn w-full mt-3">Entrar</button>
-  </form>
+<div id="login-view" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950">
+ <div class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 bg-white rounded-2xl shadow-2xl overflow-hidden">
+  <div class="p-8 md:p-12 flex flex-col justify-between bg-slate-900 text-white">
+   <div>
+    <img src="/logo-att.png" alt="AT&T" class="h-10 mb-6 bg-white rounded-lg p-1.5 inline-block" style="width:auto" onerror="this.style.display='none'">
+    <div class="flex items-center space-x-2 mb-6"><i class="fa-solid fa-location-dot text-brandOrange text-2xl"></i><span class="text-2xl font-black tracking-wider">FLOTAS</span></div>
+    <h1 class="text-3xl font-bold mb-3">Validación de unidades</h1>
+    <p class="text-slate-400 text-sm mb-6">Instalaciones, migraciones, posición, eventos y evidencias en un solo flujo.</p>
+   </div>
+   <div class="text-xs text-slate-500">Administración de Flotas Geotab</div>
+  </div>
+  <div class="p-8 md:p-12 flex flex-col justify-center">
+   <h2 class="text-xl font-bold mb-1">Iniciar sesión</h2>
+   <p class="text-xs text-slate-500 mb-6">Acceso autorizado por rol</p>
+   <form onsubmit="handleLogin(event)" class="space-y-4">
+    <div><label class="lbl">Usuario</label><input id="usuario" required autocapitalize="none" autocomplete="username" class="inp" placeholder="usuario"></div>
+    <div><label class="lbl">Contraseña</label><input id="password" type="password" required autocomplete="current-password" class="inp" placeholder="••••••••"></div>
+    <button class="w-full py-3 bg-brandOrange hover:bg-orange-600 text-white font-semibold rounded-lg shadow">Entrar</button>
+    <div id="login-error" class="text-xs text-red-500 text-center hidden"></div>
+   </form>
+  </div>
+ </div>
 </div>
 
-<!-- APP -->
-<div id="app" class="hidden">
-  <header class="bg-white border-b border-slate-200">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-      <img src="logo-att.png" onerror="this.style.display='none'" class="h-8" alt="">
-      <div class="flex-1 min-w-0"><div class="font-bold app-name truncate">ADF Control</div><div id="who" class="text-xs text-slate-500 truncate"></div></div>
-      <button class="btn btn2 btns" data-a="miPass"><i class="fa fa-key"></i><span class="hidden sm:inline"> Contraseña</span></button>
-      <button class="btn btn2 btns" data-a="salir"><i class="fa fa-right-from-bracket"></i><span class="hidden sm:inline"> Salir</span></button>
+<!-- PANEL -->
+<div id="dashboard-view" class="hidden min-h-screen flex flex-col">
+ <header class="bg-slate-900 text-white px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800">
+  <div class="flex items-center space-x-2"><span class="text-brandOrange font-black tracking-wider text-xl">FLOTAS</span><span class="text-slate-400 text-xs font-semibold">| Validaciones</span></div>
+  <nav id="nav" class="flex items-center gap-2 text-xs font-bold overflow-x-auto order-3 md:order-none w-full md:w-auto"></nav>
+  <div class="flex items-center space-x-3">
+   <div id="user-initial" class="w-7 h-7 rounded-full bg-brandOrange flex items-center justify-center font-bold text-xs">U</div>
+   <div class="text-right"><div id="user-display" class="text-xs font-bold">USUARIO</div><div id="user-role-display" class="text-[10px] text-slate-400">Rol</div></div>
+   <button onclick="modalPass(false)" class="text-slate-400 hover:text-white" title="Cambiar contraseña"><i class="fa-solid fa-key"></i></button>
+   <button onclick="logout()" class="text-slate-400 hover:text-white" title="Cerrar sesión"><i class="fa-solid fa-right-from-bracket"></i></button>
+  </div>
+ </header>
+
+ <main class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto space-y-6">
+
+  <!-- COORDINADOR: Servicios -->
+  <div id="tab-servicios" class="pane hidden space-y-4">
+   <div class="flex flex-wrap items-center gap-2">
+    <h2 class="text-xl font-bold mr-2">Servicios AT&T</h2>
+    <div id="chips" class="flex gap-2"></div>
+    <input id="buscar" oninput="pintar()" class="inp max-w-xs" placeholder="Buscar folio, técnico, cliente…">
+    <button onclick="exportar()" class="ml-auto px-4 py-2 bg-white border rounded-lg text-xs font-bold shadow-sm"><i class="fa-solid fa-file-export mr-1 text-blue-600"></i>Exportar Excel</button>
+    <label class="px-4 py-2 bg-white border rounded-lg text-xs font-bold cursor-pointer shadow-sm"><i class="fa-solid fa-file-excel mr-1 text-emerald-600"></i>Importar Excel<input id="xl" type="file" accept=".xlsx,.xls" class="hidden"></label>
+   </div>
+   <div class="bg-white rounded-xl shadow-sm border overflow-x-auto">
+    <table class="w-full text-left text-xs min-w-[720px]">
+     <thead><tr class="bg-slate-800 text-white"><th class="p-3">Folio acuerdo</th><th class="p-3">Visita</th><th class="p-3">Motivo</th><th class="p-3">Cliente</th><th class="p-3">Ciudad</th><th class="p-3">Técnico</th><th class="p-3">Estatus</th><th class="p-3 text-center">Acciones</th></tr></thead>
+     <tbody id="tabla" class="divide-y divide-slate-100"></tbody>
+    </table>
+   </div>
+  </div>
+
+  <!-- COORDINADOR: Nuevo servicio -->
+  <div id="tab-nuevo" class="pane hidden">
+   <div class="bg-white p-6 md:p-8 rounded-xl shadow-sm border">
+    <h3 class="text-base font-bold mb-4">Crear nuevo servicio</h3>
+    <form id="form-nuevo" onsubmit="crearServicio(event)" class="space-y-5">
+     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div><label class="lbl">Folio acuerdo *</label><input name="folioAcuerdo" required class="inp" placeholder="Ej. 3873031757-3"></div>
+      <div><label class="lbl">Técnico asignado *</label><select name="tecnicoAsignado" id="sel-tec" required class="inp"></select></div>
+      <div><label class="lbl">Fecha de visita *</label><input type="date" name="fecha" required class="inp"></div>
+      <div><label class="lbl">Hora de visita *</label><input type="time" name="hora" required class="inp"></div>
+      <div><label class="lbl">Motivo de la visita *</label><select name="motivo" id="sel-mot" required class="inp"></select></div>
+      <div><label class="lbl">Cámara</label><select name="camara" class="inp"><option>No</option><option>Sí</option></select></div>
+      <div class="md:col-span-2"><label class="lbl">Otros accesorios</label><input name="accesorios" class="inp"></div>
+      <div><label class="lbl">Nombre del cliente *</label><input name="cliente" required class="inp"></div>
+      <div><label class="lbl">Razón social *</label><input name="razonSocial" required class="inp"></div>
+      <div class="md:col-span-2"><label class="lbl">Lugar de atención *</label><input name="lugarAtencion" required class="inp"></div>
+      <div><label class="lbl">Nombre de quien recibe al técnico *</label><input name="recibe" required class="inp"></div>
+      <div><label class="lbl">Números de contacto *</label><input name="contacto" required class="inp"></div>
+      <div><label class="lbl">Ciudad *</label><input name="ciudad" required class="inp"></div>
+      <div><label class="lbl">Estado *</label><input name="estado" required class="inp" placeholder="Ej. CDMX"></div>
+     </div>
+     <button class="px-6 py-2.5 bg-brandOrange hover:bg-orange-600 text-white font-semibold rounded-lg shadow">Guardar y asignar al técnico</button>
+    </form>
+   </div>
+  </div>
+
+  <!-- COORDINADOR: Instaladores -->
+  <div id="tab-instaladores" class="pane hidden space-y-4">
+   <div class="bg-white p-6 rounded-xl shadow-sm border">
+    <h3 class="text-sm font-bold mb-1"><i class="fa-solid fa-user-plus mr-2"></i>Dar de alta coordinador o técnico</h3>
+    <p class="text-xs text-slate-500 mb-4">El nombre debe ser igual al de la lista del Excel (ej. CESAR SANCHEZ - CENTRO): con él se cruzan los servicios asignados.</p>
+    <form onsubmit="altaInstalador(event)" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+     <select id="n-rol" class="inp"><option value="tec">Técnico / Instalador</option><option value="coord">Coordinador</option></select>
+     <input id="n-nombre" required list="lista-tec" placeholder="Nombre del técnico" class="inp"><datalist id="lista-tec"></datalist>
+     <input id="n-usuario" required autocapitalize="none" placeholder="Usuario" class="inp">
+     <input id="n-pass" required minlength="6" placeholder="Contraseña (mín. 6)" class="inp">
+     <button class="py-2.5 bg-brandOrange text-white text-xs font-bold rounded-lg shadow">Dar de alta</button>
+    </form>
+   </div>
+   <div class="bg-white rounded-xl shadow-sm border overflow-x-auto">
+    <table class="w-full text-left text-xs min-w-[520px]"><thead><tr class="bg-slate-800 text-white"><th class="p-3">Nombre</th><th class="p-3">Rol</th><th class="p-3">Usuario</th><th class="p-3">Nueva contraseña</th><th class="p-3"></th></tr></thead><tbody id="tabla-inst" class="divide-y divide-slate-100"></tbody></table>
+   </div>
+  </div>
+
+  <!-- COORDINADOR: KPI -->
+  <div id="tab-kpi" class="pane hidden space-y-6">
+   <h2 class="text-xl font-bold">Métricas de operación</h2>
+   <div id="kpi-cards" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+   <div class="bg-white rounded-xl border shadow-sm p-5 overflow-x-auto"><h3 class="font-bold mb-3">Por técnico</h3><table class="w-full text-xs text-left min-w-[420px]"><thead class="text-slate-400 uppercase"><tr><th class="py-2">Técnico</th><th>Servicios</th><th>Completados</th><th>Pendientes</th></tr></thead><tbody id="kpi-tec" class="divide-y"></tbody></table></div>
+   <div class="bg-white rounded-xl border shadow-sm p-5 overflow-x-auto"><h3 class="font-bold mb-3">Por motivo de la visita</h3><table class="w-full text-xs text-left min-w-[420px]"><thead class="text-slate-400 uppercase"><tr><th class="py-2">Motivo</th><th>Servicios</th><th>Completados</th><th>Pendientes</th></tr></thead><tbody id="kpi-mot" class="divide-y"></tbody></table></div>
+  </div>
+
+  <!-- TÉCNICO: Mis servicios -->
+  <div id="tab-mis" class="pane hidden space-y-3">
+   <h2 class="text-xl font-bold">Mis servicios</h2>
+   <div id="lista-tec-servicios" class="space-y-3"></div>
+  </div>
+
+  <!-- TÉCNICO: Captura -->
+  <div id="tab-captura" class="pane hidden">
+   <div class="bg-white p-6 md:p-8 rounded-xl shadow-sm border">
+    <h3 class="text-base font-bold mb-1">Completar ODS y evidencias</h3>
+    <div id="resumen" class="text-xs text-slate-500 mb-5">Elige un servicio en «Mis servicios» para capturarlo.</div>
+    <form id="form-ods" onsubmit="enviarODS(event)" class="space-y-6">
+     <input type="hidden" id="input-folio" name="folioAcuerdo">
+     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-xl border">
+      <div><label class="lbl">Serie GO9 *</label><input name="serialGo9" required autocapitalize="characters" class="inp" placeholder="Ej. G95NKM878RSN"></div>
+      <div><label class="lbl">IMEI cámara</label><input name="imeiCamara" inputmode="numeric" class="inp"></div>
+      <div><label class="lbl">Número de SIM</label><input name="numeroSim" class="inp"></div>
+      <div><label class="lbl">Arnés</label><input name="arnes" class="inp" placeholder="Ej. 16K22"></div>
+     </div>
+     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div><label class="lbl">Marca</label><input name="marcaVehiculo" class="inp"></div>
+      <div><label class="lbl">Modelo</label><input name="modeloVehiculo" class="inp"></div>
+      <div><label class="lbl">VIN (17 caracteres)</label><input name="vinVehiculo" maxlength="17" autocapitalize="characters" class="inp"></div>
+      <div><label class="lbl">Placas</label><input name="placasVehiculo" autocapitalize="characters" class="inp"></div>
+     </div>
+     <div class="p-4 bg-blue-50/50 rounded-xl border border-blue-100 space-y-3">
+      <h4 class="text-xs font-bold text-blue-900 uppercase">Evidencias fotográficas</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+       <div><label class="lbl">Foto del adherible del GO9</label><input type="file" name="foto_adherible" accept="image/*" class="w-full text-xs"></div>
+       <div><label class="lbl">Foto IMEI y SIM de cámara</label><input type="file" name="foto_imei_camara" accept="image/*" class="w-full text-xs"></div>
+       <div><label class="lbl">Foto del VIN</label><input type="file" name="foto_vin" accept="image/*" class="w-full text-xs"></div>
+       <div><label class="lbl">Fotos de la instalación (varias)</label><input type="file" name="foto_tablero" accept="image/*" multiple class="w-full text-xs"></div>
+      </div>
+     </div>
+     <div>
+      <h4 class="text-xs font-bold text-slate-700 uppercase mb-2">Partes eléctricas funcionando</h4>
+      <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="bg-slate-800 text-white"><th class="p-2 text-left">Descripción</th><th class="p-2">Sí</th><th class="p-2">No</th><th class="p-2">N/A</th></tr></thead><tbody id="elec-body" class="divide-y"></tbody></table></div>
+      <label class="lbl mt-3">Observaciones de partes eléctricas</label><textarea name="obsElec" rows="2" class="inp"></textarea>
+     </div>
+     <div><label class="lbl">Comentario del técnico / observaciones</label><textarea name="comentarioTecnico" rows="3" class="inp" placeholder="Ej. Instalación concluida sin novedad."></textarea></div>
+     <div class="space-y-3">
+      <h4 class="text-xs font-bold text-slate-700 uppercase">Firmas</h4>
+      <input id="firma-nombre" class="inp" placeholder="Nombre de quien recibe (cliente)">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+       <div><div class="lbl">Firma del cliente</div><canvas id="firma-cliente" width="500" height="160" class="w-full bg-white border-2 border-dashed border-slate-300 rounded-lg"></canvas><button type="button" onclick="limpiar('firma-cliente')" class="text-xs text-slate-500 underline">Borrar</button></div>
+       <div><div class="lbl">Firma del técnico</div><canvas id="firma-tecnico" width="500" height="160" class="w-full bg-white border-2 border-dashed border-slate-300 rounded-lg"></canvas><button type="button" onclick="limpiar('firma-tecnico')" class="text-xs text-slate-500 underline">Borrar</button></div>
+      </div>
+     </div>
+     <button id="btn-ods" class="w-full py-3.5 bg-brandOrange hover:bg-orange-600 text-white font-bold rounded-xl shadow">Generar y descargar ODS en PDF</button>
+    </form>
+    <div id="resultado" class="mt-6 hidden p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+     <p class="text-emerald-700 font-semibold mb-2"><i class="fa-solid fa-circle-check mr-2"></i>¡Orden generada y registrada!</p>
+     <a id="link-pdf" href="#" download class="inline-flex items-center px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow"><i class="fa-solid fa-download mr-2"></i>Descargar PDF</a>
     </div>
-    <div id="banner" class="text-sm px-4 py-2 bg-cyan-50 text-cyan-900 border-t border-cyan-100"></div>
-  </header>
-  <nav class="tabs"><div id="tabs" class="flex max-w-6xl mx-auto w-full"></div></nav>
-  <main id="pane" class="max-w-6xl mx-auto p-4"></main>
+   </div>
+  </div>
+ </main>
 </div>
-<div id="modal"></div>
+<div id="modal" class="hidden fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4"><div id="modal-body" class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"></div></div>
+<div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-6 z-50 hidden px-4 py-2 rounded-lg text-sm text-white shadow-lg max-w-[90vw]"></div>
 
 <script>
-const $ = s => document.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const ls = { get(k){ try { return localStorage.getItem(k) || '' } catch(e){ return '' } }, set(k,v){ try { v ? localStorage.setItem(k,v) : localStorage.removeItem(k) } catch(e){} } };
-let token = ls.get('adf_tk'), me = null, cfg = { nombre:'ADF Control', motivos:[], elec:[], categorias:[], geotab:false };
-let S = { servicios:[], vals:[], usuarios:[], salud:null }, tab = '', filtro = 'Todos', busca = '', capFolio = '', saludCat = '', saludQ = '', kpiP = 'mes', kpiD = '', kpiH = '';
-const ROL = { coord:'Coordinador', tec:'Técnico', soporte:'Soporte' };
-const TABS = {
-  coord:[['servicios','Servicios'],['nuevo','Nuevo servicio'],['solic','Solicitudes'],['usuarios','Usuarios'],['kpi','KPI'],['salud','Salud de equipos']],
-  soporte:[['solic','Solicitudes'],['servicios','Servicios'],['kpi','KPI'],['salud','Salud de equipos']],
-  tec:[['servicios','Mis servicios'],['capturar','Capturar ODS'],['solic','Solicitudes']] };
+const $=id=>document.getElementById(id);
+const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const MOT=['Instalación','Desinstalación','Reinstalación','Revisión','Reemplazo','Intercambio','Remover','Visita en falso'];
+const TABS={coord:[['tab-servicios','Servicios'],['tab-nuevo','Nuevo servicio'],['tab-instaladores','Usuarios'],['tab-kpi','KPI']],tec:[['tab-mis','Mis servicios'],['tab-captura','Capturar ODS']]};
+let me=null,servicios=[],filtro='Todos';
 
-function toast(m, err){ const t = $('#toast'); t.textContent = m; t.className = 'fixed top-3 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-lg text-white text-sm shadow-lg ' + (err ? 'bg-red-600' : 'bg-emerald-600'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.add('hidden'), 3500); }
-async function api(p, o = {}){
-  const h = {}; if (token) h.Authorization = 'Bearer ' + token;
-  let body = o.body; if (body && !(body instanceof FormData)){ h['Content-Type'] = 'application/json'; body = JSON.stringify(body); }
-  const r = await fetch('/api' + p, { method:o.method || 'GET', headers:h, body });
-  let d = {}; try { d = await r.json(); } catch(e){}
-  if (r.status === 401 && token && p !== '/login'){ salir(); throw new Error('Tu sesión venció, entra de nuevo'); }
-  if (!r.ok || d.exito === false) throw new Error(d.error || ('Error ' + r.status));
-  return d;
+function toast(m,mal){const t=$('toast');t.textContent=m;t.className='fixed left-1/2 -translate-x-1/2 bottom-6 z-50 px-4 py-2 rounded-lg text-sm text-white shadow-lg max-w-[90vw] '+(mal?'bg-red-600':'bg-slate-800');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.add('hidden'),3500)}
+async function api(u,o={}){
+ o.headers={...(o.headers||{}),Authorization:'Bearer '+(localStorage.getItem('tk')||'')};
+ const r=await fetch(u,o);
+ if(r.status===401&&localStorage.getItem('tk')){localStorage.removeItem('tk');location.reload();throw new Error('Sesión expirada')}
+ return r.json();
 }
-const fmtMin = m => m == null ? '—' : m < 1 ? '<1 min' : m < 60 ? m + ' min' : Math.floor(m/60) + ' h ' + (m%60) + ' min';
-const fmtTs = t => t ? new Date(t).toLocaleString('es-MX', { timeZone:'America/Mexico_City', dateStyle:'short', timeStyle:'short' }) : '—';
-const hoyMx = () => new Date(Date.now() - 6*3600e3).toISOString().slice(0,10);
-const badge = (txt, col) => `<span class="badge" style="background:${col[0]};color:${col[1]}">${esc(txt)}</span>`;
-const COL = { 'Enviado':['#e2e8f0','#334155'], 'En curso':['#fef3c7','#92400e'], 'Completado':['#d1fae5','#065f46'],
-  'Pendiente':['#fee2e2','#991b1b'], 'En atención':['#fef3c7','#92400e'], 'Validada':['#d1fae5','#065f46'], 'Con observaciones':['#ffedd5','#9a3412'],
-  'OK':['#d1fae5','#065f46'], 'Advertencia':['#fef3c7','#92400e'], 'Crítico':['#fed7aa','#9a3412'], 'Crítico alto':['#fecaca','#991b1b'], 'Crítico severo':['#7f1d1d','#fff'], 'Desconocido':['#e2e8f0','#334155'] };
-const bd = e => badge(e, COL[e] || COL.Enviado);
-
-function modal(html){ $('#modal').innerHTML = `<div class="modalbg" data-a="cerrarBg"><div class="modal">${html}</div></div>`; }
-function cerrar(){ $('#modal').innerHTML = ''; }
+const enviar=(u,b,m='POST')=>api(u,{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
 
 // ---------- Sesión ----------
-async function init(){
-  try { cfg = (await api('/config')); document.title = cfg.nombre; document.querySelectorAll('.app-name').forEach(e => e.textContent = cfg.nombre); } catch(e){}
-  if (token){ try { me = (await api('/yo')).usuario; return entrar(); } catch(e){} }
-  $('#login').classList.remove('hidden');
+async function handleLogin(e){
+ e.preventDefault();const er=$('login-error');er.classList.add('hidden');
+ try{
+  const d=await (await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:$('usuario').value,password:$('password').value})})).json();
+  if(!d.exito||!d.token){er.textContent=d.error||'El servidor es la versión anterior: sube el server.js nuevo y reinícialo.';er.classList.remove('hidden');return}
+  localStorage.setItem('tk',d.token);entrar(d.usuario);
+ }catch(x){er.textContent='No hay conexión con el servidor';er.classList.remove('hidden')}
 }
-$('#fLogin').addEventListener('submit', async e => {
-  e.preventDefault(); $('#lerr').textContent = '';
-  try { const d = await api('/login', { method:'POST', body:{ usuario:$('#lu').value, password:$('#lp').value } });
-    token = d.token; ls.set('adf_tk', token); me = d.usuario; $('#lp').value = ''; entrar();
-  } catch(err){ $('#lerr').textContent = err.message; }
-});
-function salir(){ token = ''; ls.set('adf_tk',''); me = null; clearInterval(window._iv); $('#app').classList.add('hidden'); $('#login').classList.remove('hidden'); cerrar(); }
-async function entrar(){
-  $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
-  $('#who').textContent = me.nombre + ' · ' + ROL[me.rol];
-  $('#tabs').innerHTML = TABS[me.rol].map(([k,n]) => `<div class="tab" data-a="tab" data-t="${k}">${n}</div>`).join('');
-  if (me.debeCambiar) miPass(true);
-  await Promise.all([cargaServ(), cargaVals(), cargaTurno()]);
-  if (me.rol === 'coord') cargaUsuarios().catch(() => {});
-  irTab(TABS[me.rol][0][0]);
-  clearInterval(window._iv); window._iv = setInterval(async () => { if (!token) return; await cargaTurno(); if (tab === 'solic'){ await cargaVals(); pintaSolic(); } }, 30000);
+const ELEC=['Intermitentes/direccionales','Luces delanteras','Stop','Limpia parabrisas','Limpiador trasero','Enciende algún testigo en el tablero','Encendedor','Radio','Elevadores eléctricos','Seguros eléctricos','¿Cuenta con alarma? ¿funciona?','Espejos laterales eléctricos','Luces interiores','Cámara de reversa','Aire acondicionado','Claxon'];
+document.addEventListener('DOMContentLoaded',()=>{$('elec-body').innerHTML=ELEC.map((it,i)=>`<tr><td class="p-2">${it}</td>${['Sí','No','N/A'].map(v=>`<td class="p-2 text-center"><input type="radio" name="elec_${i}" value="${v}" style="width:18px;height:18px"></td>`).join('')}</tr>`).join('')});
+function logout(){localStorage.removeItem('tk');location.reload()}
+function entrar(u){
+ me=u;const c=u.rol==='coord';
+ $('login-view').classList.add('hidden');$('dashboard-view').classList.remove('hidden');
+ $('user-display').textContent=u.nombre;$('user-initial').textContent=u.nombre.charAt(0).toUpperCase();
+ $('user-role-display').textContent=c?'Coordinador AT&T':'Instalador / Técnico de campo';
+ $('nav').innerHTML=TABS[c?'coord':'tec'].map(([id,l])=>`<button data-tab="${id}" onclick="tab('${id}')" class="nav-btn whitespace-nowrap px-4 py-2 rounded-full text-slate-300 hover:text-white hover:bg-slate-800">${l}</button>`).join('');
+ if(c)cargarTecnicos();
+ tab(c?'tab-servicios':'tab-mis');
+ if(u.debeCambiar)modalPass(true);
 }
-function miPass(forzado){
-  modal(`<h3 class="font-bold text-lg mb-1">Cambiar contraseña</h3>${forzado ? '<p class="text-sm text-amber-700">Estás usando la contraseña inicial. Cámbiala para continuar.</p>' : ''}
-    <label class="l">Contraseña actual</label><input id="pa" type="password" class="inp">
-    <label class="l">Nueva contraseña (mínimo 8 caracteres)</label><input id="pn" type="password" class="inp">
-    <div class="flex gap-2 mt-4"><button class="btn" data-a="guardaPass">Guardar</button>${forzado ? '' : '<button class="btn btn2" data-a="cerrar">Cancelar</button>'}</div>`);
-}
-
-// ---------- Datos ----------
-async function cargaServ(){ S.servicios = (await api('/servicios')).servicios; }
-async function cargaVals(){ S.vals = (await api('/validaciones')).validaciones; }
-async function cargaUsuarios(){ S.usuarios = (await api('/usuarios')).usuarios; }
-async function cargaTurno(){
-  try { const t = (await api('/turno')).turno;
-    $('#banner').innerHTML = t.length ? '<i class="fa fa-headset"></i> <b>Soporte en turno:</b> ' + t.map(x => `${esc(x.nombre)} (${esc(x.inicio)}–${esc(x.fin)}) · atendiendo ${x.atendiendo}${x.tecnicos.length ? ' [' + x.tecnicos.map(esc).join(', ') + ']' : ''}`).join(' &nbsp;|&nbsp; ')
-      : '<i class="fa fa-headset"></i> Sin soporte en turno en este momento';
-  } catch(e){}
-}
-
-async function irTab(t){
-  tab = t;
-  document.querySelectorAll('.tab').forEach(e => e.classList.toggle('on', e.dataset.t === t));
-  const P = { servicios:pintaServ, nuevo:pintaNuevo, capturar:pintaCap, solic:pintaSolic, usuarios:pintaUsers, kpi:pintaKpi, salud:pintaSalud };
-  try {
-    if (t === 'servicios') await cargaServ();
-    if (t === 'solic' || t === 'capturar') { await cargaVals(); if (t === 'capturar') await cargaServ(); }
-    if (t === 'usuarios') await cargaUsuarios();
-    if (t === 'nuevo' && me.rol === 'coord') await cargaUsuarios();
-  } catch(e){ toast(e.message, 1); }
-  P[t]();
+function tab(id){
+ document.querySelectorAll('.pane').forEach(p=>p.classList.add('hidden'));$(id).classList.remove('hidden');
+ document.querySelectorAll('.nav-btn').forEach(b=>{const on=b.dataset.tab===id;b.classList.toggle('bg-brandOrange',on);b.classList.toggle('text-white',on);b.classList.toggle('text-slate-300',!on)});
+ if(['tab-servicios','tab-kpi','tab-mis'].includes(id))cargarServicios();
+ if(id==='tab-instaladores')cargarInstaladores();
+ window.scrollTo(0,0);
 }
 
 // ---------- Servicios ----------
-function pintaServ(){
-  $('#pane').innerHTML = `<div class="card">
-    <div class="flex flex-wrap gap-2 items-center mb-3">
-      ${['Todos','Enviado','En curso','Completado'].map(f => `<span class="chip ${f === filtro ? 'on' : ''}" data-a="filtro" data-f="${f}">${f === 'Enviado' ? 'Enviados' : f === 'Completado' ? 'Completados' : f}</span>`).join('')}
-      <input id="q" class="inp" style="max-width:260px;margin-left:auto" placeholder="Buscar folio, cliente, técnico..." value="${esc(busca)}">
-      ${me.rol === 'coord' ? '<button class="btn btn2 btns" data-a="exportaServ"><i class="fa fa-file-excel"></i> Exportar</button>' : ''}
-    </div><div id="tbl" class="wrap"></div></div>`;
-  $('#q').addEventListener('input', e => { busca = e.target.value; pintaTablaServ(); });
-  pintaTablaServ();
+async function cargarServicios(){
+ try{const d=await api('/api/servicios');servicios=d.servicios||[]}catch(x){return}
+ pintar();pintarKPI();pintarTec();
 }
-function listaServ(){
-  const q = busca.toLowerCase();
-  return S.servicios.filter(s => (filtro === 'Todos' || s.estatus === filtro) && (!q || [s.folio, s.cliente, s.tecnico, s.motivo, s.ciudad].join(' ').toLowerCase().includes(q)));
+function filtrados(){
+ const q=($('buscar').value||'').toLowerCase();
+ return servicios.filter(s=>(filtro==='Todos'||s.estatus===filtro)&&(!q||JSON.stringify([s.folio,s.tecnico,s.cliente,s.razon,s.ciudad]).toLowerCase().includes(q)));
 }
-function pintaTablaServ(){
-  const l = listaServ();
-  $('#tbl').innerHTML = l.length ? `<table><thead><tr><th>Folio</th><th>Técnico</th><th>Fecha</th><th>Motivo</th><th>Cliente</th><th>Estatus</th><th>Duración</th><th></th></tr></thead><tbody>${l.map(s => `<tr>
-    <td class="font-semibold">${esc(s.folio)}</td><td>${esc(s.tecnico)}</td><td class="whitespace-nowrap">${esc(s.fecha)} ${esc(s.hora)}</td><td>${esc(s.motivo)}</td><td>${esc(s.cliente)}</td>
-    <td>${bd(s.estatus)}</td><td class="whitespace-nowrap">${fmtMin(s.duracion)}</td>
-    <td class="whitespace-nowrap text-right">
-      ${me.rol === 'tec' && s.estatus !== 'Completado' ? `<button class="btn btns" data-a="capturar" data-f="${esc(s.folio)}">${s.estatus === 'Enviado' ? 'Iniciar' : 'Continuar'}</button> ` : ''}
-      ${s.urlDoc ? `<a class="btn btn2 btns" href="${esc(s.urlDoc)}" target="_blank">PDF</a> ` : ''}
-      ${s.estatus === 'Completado' && ['tec','coord'].includes(me.rol) ? `<button class="btn btn2 btns" data-a="pedirVal" data-f="${esc(s.folio)}">Validar</button> ` : ''}
-      <button class="btn btn2 btns" data-a="detalle" data-f="${esc(s.folio)}">Ver</button>
-      ${me.rol === 'coord' ? `<button class="btn btnr btns" data-a="borraServ" data-f="${esc(s.folio)}"><i class="fa fa-trash"></i></button>` : ''}
-    </td></tr>`).join('')}</tbody></table>` : '<p class="text-slate-500 text-sm py-6 text-center">No hay servicios para mostrar.</p>';
+function pintar(){
+ if(!me||me.rol!=='coord')return;
+ $('chips').innerHTML=['Todos','Enviado','Completado'].map(f=>`<button onclick="filtro='${f}';pintar()" class="px-3 py-1 rounded-full text-xs font-bold border ${f===filtro?'bg-slate-800 text-white border-slate-800':'bg-white'}">${f==='Enviado'?'Enviados':f==='Completado'?'Completados':f}</button>`).join('');
+ const l=filtrados();
+ $('tabla').innerHTML=l.length?l.map(s=>`<tr class="hover:bg-slate-50"><td class="p-3 font-bold">${E(s.folio)}</td><td class="p-3">${E(s.fecha)} ${E(s.hora)}</td><td class="p-3">${E(s.motivo)}</td>
+  <td class="p-3"><b>${E(s.cliente)}</b><div class="text-slate-400">${E(s.razon)}</div></td><td class="p-3">${E(s.ciudad)}${s.edo?', '+E(s.edo):''}</td><td class="p-3">${E(s.tecnico)}</td>
+  <td class="p-3"><span class="px-2.5 py-0.5 rounded-full font-bold ${s.estatus==='Completado'?'bg-emerald-100 text-emerald-800':'bg-blue-100 text-blue-800'}">${E(s.estatus)}</span></td>
+  <td class="p-3 text-center whitespace-nowrap"><button data-f="${E(s.folio)}" onclick="verServicio(this.dataset.f)" class="text-slate-600 mr-3" title="Ver detalle"><i class="fa-solid fa-eye"></i></button>${s.urlDoc?`<a href="${E(s.urlDoc)}" download class="text-blue-600 mr-3" title="Descargar PDF"><i class="fa-solid fa-download"></i></a>`:''}<button data-f="${E(s.folio)}" onclick="borrarServicio(this.dataset.f)" class="text-red-500" title="Eliminar"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')
+  :'<tr><td colspan="8" class="p-4 text-center text-slate-500">No hay servicios. Importa tu Excel o crea uno nuevo.</td></tr>';
 }
-function detalle(folio){
-  const s = S.servicios.find(x => x.folio === folio); if (!s) return;
-  const f = (l, v) => v ? `<div><div class="text-xs text-slate-500">${l}</div><div class="text-sm">${esc(v)}</div></div>` : '';
-  modal(`<div class="flex justify-between items-start"><h3 class="font-bold text-lg">${esc(s.folio)}</h3>${bd(s.estatus)}</div>
-    <div class="grid grid-cols-2 gap-3 mt-3">${f('Técnico',s.tecnico)}${f('Fecha',s.fecha + ' ' + s.hora)}${f('Motivo',s.motivo)}${f('Cliente',s.cliente)}${f('Razón social',s.razon)}${f('Lugar',s.lugar)}
-      ${f('Recibe',s.recibe)}${f('Contacto',s.contacto)}${f('Ciudad',s.ciudad)}${f('Estado',s.edo)}${f('Serie GO9',s.serie)}${f('IMEI cámara',s.imei)}${f('SIM',s.sim)}${f('Arnés',s.arnes)}
-      ${f('Vehículo',[s.marca,s.modelo].filter(Boolean).join(' '))}${f('Placas',s.placas)}${f('VIN',s.vin)}${f('Duración',s.duracion != null ? fmtMin(s.duracion) : '')}
-      ${f('Abierto',s.abiertoEn ? fmtTs(s.abiertoEn) : '')}${f('Completado',s.completadoEn ? fmtTs(s.completadoEn) : '')}</div>
-    ${s.comentario ? `<div class="mt-3">${f('Comentario del técnico', s.comentario)}</div>` : ''}
-    ${s.elec ? `<div class="mt-3 text-xs text-slate-500">Partes eléctricas</div><div class="grid grid-cols-2 gap-x-3 text-sm">${Object.entries(s.elec).map(([k,v]) => `<div>${esc(k)}: <b>${esc(v)}</b></div>`).join('')}</div>${s.obsElec ? `<div class="mt-2 text-sm">Obs.: ${esc(s.obsElec)}</div>` : ''}` : ''}
-    <div class="flex gap-2 mt-4">${s.urlDoc ? `<a class="btn" href="${esc(s.urlDoc)}" target="_blank">Abrir PDF</a>` : ''}<button class="btn btn2" data-a="cerrar">Cerrar</button></div>`);
+async function borrarServicio(f){if(!confirm('¿Eliminar el servicio '+f+'?'))return;await api('/api/servicios/'+encodeURIComponent(f),{method:'DELETE'});cargarServicios()}
+async function crearServicio(e){
+ e.preventDefault();const f=$('form-nuevo'),o=Object.fromEntries(new FormData(f).entries());o.fecha=o.fecha.split('-').reverse().join('/');
+ const d=await enviar('/api/servicios',o);if(!d.exito)return toast(d.error,1);
+ toast('Servicio creado y asignado');f.reset();tab('tab-servicios');
 }
-function exportaServ(){
-  const rows = S.servicios.map(s => ({ Folio:s.folio, Técnico:s.tecnico, Fecha:s.fecha, Hora:s.hora, Motivo:s.motivo, Cliente:s.cliente, 'Razón social':s.razon, Lugar:s.lugar, Ciudad:s.ciudad, Estado:s.edo,
-    Estatus:s.estatus, 'Duración (min)':s.duracion ?? '', 'Serie GO9':s.serie || '', VIN:s.vin || '', Placas:s.placas || '' }));
-  bajaXlsx(rows, 'Servicios', 'servicios.xlsx');
-}
-function bajaXlsx(rows, hoja, nombre){
-  if (typeof XLSX === 'undefined') return toast('No se pudo cargar el generador de Excel', 1);
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), hoja); XLSX.writeFile(wb, nombre);
-}
-
-// ---------- Nuevo servicio (coordinador) ----------
-function pintaNuevo(){
-  const tecs = S.usuarios.filter(u => u.rol === 'tec' && u.activo !== false);
-  const inp = (id, l, ex = '') => `<div><label class="l">${l}</label><input id="n_${id}" class="inp" ${ex}></div>`;
-  $('#pane').innerHTML = `<div class="card"><h2 class="font-bold text-lg">Nuevo servicio</h2>
-    <div class="grid sm:grid-cols-2 gap-x-4">
-      ${inp('folio','Folio de acuerdo *')}
-      <div><label class="l">Técnico asignado *</label><select id="n_tec" class="inp"><option value="">Selecciona...</option>${tecs.map(u => `<option>${esc(u.nombre)}</option>`).join('')}</select></div>
-      <div><label class="l">Motivo de la visita</label><select id="n_motivo" class="inp">${cfg.motivos.map(m => `<option>${esc(m)}</option>`).join('')}</select></div>
-      ${inp('fecha','Fecha *','type="date" value="' + hoyMx() + '"')}${inp('hora','Hora *','type="time" value="09:00"')}
-      ${inp('cliente','Nombre del cliente *')}${inp('razon','Razón social')}${inp('lugar','Lugar de atención *')}${inp('recibe','Quien recibe al técnico *')}
-      ${inp('contacto','Teléfono de contacto *','type="tel"')}${inp('ciudad','Ciudad *')}${inp('edo','Estado *')}
-      <div><label class="l">¿Instalación de cámara?</label><select id="n_camara" class="inp"><option>No</option><option>Sí</option></select></div>
-      ${inp('acc','Accesorios')}
-    </div>
-    <div class="flex flex-wrap gap-2 mt-4"><button class="btn" data-a="creaServ">Crear y enviar al técnico</button></div>
-    <hr class="my-5"><h3 class="font-semibold">Carga masiva desde Excel</h3>
-    <p class="text-sm text-slate-500 mb-2">Usa la plantilla Plantilla_servicios_ATT.xlsx (hoja "Servicios").</p>
-    <input id="n_xls" type="file" accept=".xlsx,.xls" class="text-sm"> <button class="btn btn2 btns" data-a="importa">Importar</button></div>`;
-}
-async function creaServ(btn){
-  const v = id => $('#n_' + id).value.trim(), req = { folio:'folio', tec:'técnico', fecha:'fecha', hora:'hora', cliente:'cliente', lugar:'lugar', recibe:'quien recibe', contacto:'contacto', ciudad:'ciudad', edo:'estado' };
-  for (const k in req) if (!v(k)) return toast('Falta: ' + req[k], 1);
-  btn.disabled = true;
-  try {
-    await api('/servicios', { method:'POST', body:{ folioAcuerdo:v('folio'), tecnicoAsignado:v('tec'), motivo:v('motivo'), fecha:v('fecha').split('-').reverse().join('/'), hora:v('hora'), cliente:v('cliente'),
-      razonSocial:v('razon'), lugarAtencion:v('lugar'), recibe:v('recibe'), contacto:v('contacto'), ciudad:v('ciudad'), estado:v('edo'), camara:v('camara'), accesorios:v('acc') } });
-    toast('Servicio creado'); await cargaServ(); irTab('servicios');
-  } catch(e){ toast(e.message, 1); btn.disabled = false; }
-}
-async function importa(btn){
-  const f = $('#n_xls').files[0]; if (!f) return toast('Elige el archivo Excel', 1);
-  const fd = new FormData(); fd.append('archivo', f); btn.disabled = true;
-  try { const d = await api('/servicios/importar', { method:'POST', body:fd });
-    toast(`Cargados: ${d.cargados} · repetidos: ${d.repetidos}` + (d.filasIncompletas.length ? ' · filas incompletas: ' + d.filasIncompletas.join(', ') : ''), d.filasIncompletas.length > 0);
-    await cargaServ();
-  } catch(e){ toast(e.message, 1); } btn.disabled = false;
-}
-
-// ---------- Captura de ODS (técnico) ----------
-let sigs = {};
-function pintaCap(){
-  const disp = S.servicios.filter(s => s.estatus !== 'Completado');
-  if (capFolio && !disp.some(s => s.folio === capFolio)) capFolio = '';
-  const foto = (n, l, extra = '') => `<div><label class="l">${l}</label><input type="file" name="${n}" accept="image/*" ${extra} class="text-sm w-full"></div>`;
-  $('#pane').innerHTML = `<div class="card"><h2 class="font-bold text-lg">Capturar ODS</h2>
-    <label class="l">Servicio</label>
-    <select id="cf" class="inp"><option value="">Selecciona un folio...</option>${disp.map(s => `<option value="${esc(s.folio)}" ${s.folio === capFolio ? 'selected' : ''}>${esc(s.folio)} · ${esc(s.cliente)} · ${esc(s.motivo)}</option>`).join('')}</select>
-    <div id="cinfo" class="text-sm text-slate-600 mt-2"></div>
-    <form id="fcap" class="hidden">
-      <h3 class="font-semibold mt-5">Equipo instalado</h3>
-      <div class="grid sm:grid-cols-2 gap-x-4">
-        <div><label class="l">Serie GO9 *</label><input name="serialGo9" class="inp" autocapitalize="characters"></div>
-        <div><label class="l">IMEI de cámara</label><input name="imeiCamara" class="inp" inputmode="numeric"></div>
-        <div><label class="l">Número de SIM</label><input name="numeroSim" class="inp"></div>
-        <div><label class="l">Arnés</label><input name="arnes" class="inp"></div>
-        <div><label class="l">Marca del vehículo</label><input name="marcaVehiculo" class="inp"></div>
-        <div><label class="l">Modelo</label><input name="modeloVehiculo" class="inp"></div>
-        <div><label class="l">Placas</label><input name="placasVehiculo" class="inp" autocapitalize="characters"></div>
-        <div><label class="l">VIN *</label><input name="vinVehiculo" class="inp" autocapitalize="characters" maxlength="17"></div>
-      </div>
-      <label class="l">Comentario del técnico</label><textarea name="comentarioTecnico" class="inp" rows="2"></textarea>
-      <h3 class="font-semibold mt-5">Partes eléctricas funcionando</h3>
-      <div class="wrap"><table><thead><tr><th>Descripción</th><th class="text-center">Sí</th><th class="text-center">No</th><th class="text-center">N/A</th></tr></thead><tbody>
-        ${cfg.elec.map((it, i) => `<tr><td>${esc(it)}</td>${['Sí','No','N/A'].map(v => `<td class="text-center"><input type="radio" name="elec_${i}" value="${v}" style="width:20px;height:20px"></td>`).join('')}</tr>`).join('')}
-      </tbody></table></div>
-      <label class="l">Observaciones de partes eléctricas</label><textarea name="obsElec" class="inp" rows="2"></textarea>
-      <h3 class="font-semibold mt-5">Fotos</h3>
-      <div class="grid sm:grid-cols-2 gap-x-4">${foto('foto_adherible','Adherible del GO9')}${foto('foto_imei_camara','IMEI y SIM de cámara')}${foto('foto_vin','VIN')}${foto('foto_tablero','Instalación (puedes elegir varias)','multiple')}</div>
-      <h3 class="font-semibold mt-5">Firmas</h3>
-      <div class="grid sm:grid-cols-2 gap-4">
-        <div><label class="l">Nombre de quien firma por el cliente</label><input name="nombreCliente" class="inp mb-2"><canvas class="sig" id="sigC"></canvas><button type="button" class="btn btn2 btns mt-1" data-a="limpiaSig" data-s="sigC">Borrar firma cliente</button></div>
-        <div><label class="l">Firma del técnico</label><div style="height:42px"></div><canvas class="sig" id="sigT"></canvas><button type="button" class="btn btn2 btns mt-1" data-a="limpiaSig" data-s="sigT">Borrar firma técnico</button></div>
-      </div>
-      <button class="btn w-full mt-5" id="bGen" style="padding:13px">Generar ODS en PDF</button>
-    </form></div>`;
-  $('#cf').addEventListener('change', e => { capFolio = e.target.value; if (capFolio) abrirSi(capFolio); muestraForm(); });
-  muestraForm();
-}
-async function abrirSi(folio){
-  const s = S.servicios.find(x => x.folio === folio);
-  if (me.rol === 'tec' && s && s.estatus === 'Enviado'){ try { await api('/servicios/' + encodeURIComponent(folio) + '/abrir', { method:'POST' }); s.estatus = 'En curso'; s.abiertoEn = Date.now(); } catch(e){ toast(e.message, 1); } }
-}
-function muestraForm(){
-  const s = S.servicios.find(x => x.folio === capFolio), f = $('#fcap');
-  if (!s){ f.classList.add('hidden'); $('#cinfo').textContent = ''; return; }
-  $('#cinfo').innerHTML = `<b>${esc(s.cliente)}</b> · ${esc(s.lugar)}, ${esc(s.ciudad)} · ${esc(s.fecha)} ${esc(s.hora)} · Recibe: ${esc(s.recibe)} (${esc(s.contacto)})`;
-  f.classList.remove('hidden'); iniFirma('sigC'); iniFirma('sigT');
-}
-function iniFirma(id){
-  const c = $('#' + id), r = c.getBoundingClientRect(), k = window.devicePixelRatio || 1; c.width = r.width * k; c.height = r.height * k;
-  const g = c.getContext('2d'); g.scale(k, k); g.lineWidth = 2.2; g.lineCap = 'round'; g.strokeStyle = '#0f172a'; sigs[id] = false;
-  let d = false; const pos = e => { const b = c.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
-  c.onpointerdown = e => { d = true; c.setPointerCapture(e.pointerId); g.beginPath(); g.moveTo(...pos(e)); };
-  c.onpointermove = e => { if (!d) return; g.lineTo(...pos(e)); g.stroke(); sigs[id] = true; };
-  c.onpointerup = c.onpointercancel = () => { d = false; };
-}
-function limpiaSig(id){ const c = $('#' + id); c.getContext('2d').clearRect(0, 0, c.width, c.height); sigs[id] = false; }
-async function reducir(file){
-  try {
-    const bmp = await createImageBitmap(file), k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-    return await new Promise(r => c.toBlob(b => r(b || file), 'image/jpeg', 0.82));
-  } catch(e){ return file; }
-}
-async function generaOds(e){
-  e.preventDefault(); const f = $('#fcap'), btn = $('#bGen');
-  if (!f.serialGo9.value.trim()) return toast('Falta la serie del GO9', 1);
-  if (!f.vinVehiculo.value.trim()) return toast('Falta el VIN', 1);
-  if (!sigs.sigC || !sigs.sigT) return toast('Faltan las firmas del cliente y del técnico', 1);
-  btn.disabled = true; btn.textContent = 'Generando PDF...';
-  try {
-    const fd = new FormData(); fd.append('folioAcuerdo', capFolio);
-    for (const el of f.elements){
-      if (!el.name) continue;
-      if (el.type === 'file'){ for (const file of el.files) fd.append(el.name, await reducir(file), file.name.replace(/\.\w+$/, '') + '.jpg'); }
-      else if (el.type === 'radio'){ if (el.checked) fd.append(el.name, el.value); }
-      else fd.append(el.name, el.value);
-    }
-    fd.append('firmaCliente', $('#sigC').toDataURL('image/png')); fd.append('firmaTecnico', $('#sigT').toDataURL('image/png'));
-    const d = await api('/generar-ods', { method:'POST', body:fd });
-    await cargaServ(); capFolio = '';
-    modal(`<h3 class="font-bold text-lg">ODS generada</h3><p class="text-sm text-slate-600 mt-1">El servicio quedó como completado.</p>
-      <div class="flex gap-2 mt-4"><a class="btn" href="${esc(d.descargaUrl)}" target="_blank">Abrir / descargar PDF</a><button class="btn btn2" data-a="cerrar">Cerrar</button></div>`);
-    irTab('servicios');
-  } catch(err){ toast(err.message, 1); btn.disabled = false; btn.textContent = 'Generar ODS en PDF'; }
-}
-document.addEventListener('submit', e => { if (e.target.id === 'fcap') generaOds(e); });
-
-// ---------- Solicitudes de validación ----------
-function pedirVal(folio){
-  modal(`<h3 class="font-bold text-lg">Solicitar validación</h3><p class="text-sm text-slate-500">Folio ${esc(folio)}</p>
-    <label class="l">Nota para soporte (opcional)</label><textarea id="vn" class="inp" rows="3"></textarea>
-    <div class="flex gap-2 mt-4"><button class="btn" data-a="enviaVal" data-f="${esc(folio)}">Enviar</button><button class="btn btn2" data-a="cerrar">Cancelar</button></div>`);
-}
-function pintaSolic(){
-  if (tab !== 'solic') return;
-  const col = m => S.vals.filter(v => m.includes(v.estado));
-  const fila = v => `<tr><td class="font-semibold">${esc(v.folio)}</td><td>${esc(v.tecnico)}</td><td>${esc(v.cliente)}</td><td>${bd(v.estado)}</td>
-    <td class="text-xs text-slate-600">${esc(v.nota)}${v.comentario ? '<br><b>Soporte:</b> ' + esc(v.comentario) : ''}${v.soporteNombre ? '<br>Atiende: ' + esc(v.soporteNombre) : ''}</td>
-    <td class="whitespace-nowrap text-xs">${fmtTs(v.creadoEn)}</td>
-    <td class="whitespace-nowrap text-right">${v.urlDoc ? `<a class="btn btn2 btns" href="${esc(v.urlDoc)}" target="_blank">PDF</a> ` : ''}
-      ${['soporte','coord'].includes(me.rol) && v.estado === 'Pendiente' ? `<button class="btn btns" data-a="atender" data-i="${v.id}">Tomar</button> ` : ''}
-      ${['soporte','coord'].includes(me.rol) && v.estado === 'En atención' && (me.rol === 'coord' || v.soporte === me.usuario) ? `<button class="btn btns" data-a="resolver" data-i="${v.id}">Resolver</button> ` : ''}
-      ${me.rol === 'coord' ? `<button class="btn btnr btns" data-a="borraVal" data-i="${v.id}"><i class="fa fa-trash"></i></button>` : ''}</td></tr>`;
-  const tabla = (tit, l) => `<div class="card mb-4"><h3 class="font-semibold mb-2">${tit} (${l.length})</h3><div class="wrap">${l.length ? `<table><thead><tr><th>Folio</th><th>Técnico</th><th>Cliente</th><th>Estado</th><th>Detalle</th><th>Solicitada</th><th></th></tr></thead><tbody>${l.map(fila).join('')}</tbody></table>` : '<p class="text-sm text-slate-500">Sin solicitudes.</p>'}</div></div>`;
-  $('#pane').innerHTML = tabla('Abiertas', col(['Pendiente','En atención'])) + tabla('Resueltas', col(['Validada','Con observaciones']));
-}
-function resolver(id){
-  modal(`<h3 class="font-bold text-lg">Resolver solicitud</h3>
-    <label class="l">Resultado</label><select id="rr" class="inp"><option>Validada</option><option>Con observaciones</option></select>
-    <label class="l">Comentario</label><textarea id="rc" class="inp" rows="3"></textarea>
-    <div class="flex gap-2 mt-4"><button class="btn" data-a="guardaRes" data-i="${id}">Guardar</button><button class="btn btn2" data-a="cerrar">Cancelar</button></div>`);
-}
-
-// ---------- Usuarios ----------
-function pintaUsers(){
-  $('#pane').innerHTML = `<div class="card mb-4"><h2 class="font-bold text-lg">Crear usuario</h2>
-    <div class="grid sm:grid-cols-2 gap-x-4">
-      <div><label class="l">Nombre completo</label><input id="u_nombre" class="inp"></div>
-      <div><label class="l">Usuario (sin espacios)</label><input id="u_user" class="inp" autocapitalize="none"></div>
-      <div><label class="l">Rol</label><select id="u_rol" class="inp"><option value="tec">Técnico</option><option value="coord">Coordinador</option><option value="soporte">Soporte</option></select></div>
-      <div><label class="l">Contraseña (mínimo 6)</label><input id="u_pass" class="inp"></div>
-      <div class="u_turno hidden"><label class="l">Turno: inicio</label><input id="u_ti" type="time" class="inp" value="07:00"></div>
-      <div class="u_turno hidden"><label class="l">Turno: fin</label><input id="u_tf" type="time" class="inp" value="15:00"></div>
-    </div><button class="btn mt-4" data-a="creaUser">Crear usuario</button></div>
-    <div class="card"><h2 class="font-bold text-lg mb-2">Usuarios</h2><div class="wrap"><table><thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Turno</th><th>Estado</th><th></th></tr></thead><tbody>
-    ${S.usuarios.map(u => `<tr><td>${esc(u.nombre)}</td><td>${esc(u.usuario)}</td><td>${ROL[u.rol]}</td><td>${u.turno ? esc(u.turno.inicio + '–' + u.turno.fin) : '—'}</td>
-      <td>${u.activo === false ? badge('Inactivo', ['#e2e8f0','#334155']) : badge('Activo', COL.Completado)}</td>
-      <td class="text-right whitespace-nowrap"><button class="btn btn2 btns" data-a="editaUser" data-u="${esc(u.usuario)}">Editar</button></td></tr>`).join('')}</tbody></table></div></div>`;
-  const tg = () => document.querySelectorAll('.u_turno').forEach(e => e.classList.toggle('hidden', $('#u_rol').value !== 'soporte'));
-  $('#u_rol').addEventListener('change', tg); tg();
-}
-async function creaUser(btn){
-  const v = id => $('#' + id).value.trim(), rol = $('#u_rol').value;
-  btn.disabled = true;
-  try { await api('/usuarios', { method:'POST', body:{ nombre:v('u_nombre'), usuario:v('u_user'), rol, password:$('#u_pass').value, turnoInicio:v('u_ti'), turnoFin:v('u_tf') } });
-    toast('Usuario creado'); await cargaUsuarios(); pintaUsers();
-  } catch(e){ toast(e.message, 1); btn.disabled = false; }
-}
-function editaUser(un){
-  const u = S.usuarios.find(x => x.usuario === un); if (!u) return;
-  modal(`<h3 class="font-bold text-lg">Editar ${esc(u.usuario)}</h3>
-    <label class="l">Nombre</label><input id="e_nombre" class="inp" value="${esc(u.nombre)}">
-    <label class="l">Rol</label><select id="e_rol" class="inp">${Object.entries(ROL).map(([k,n]) => `<option value="${k}" ${k === u.rol ? 'selected' : ''}>${n}</option>`).join('')}</select>
-    <div class="grid grid-cols-2 gap-3"><div><label class="l">Turno inicio (soporte)</label><input id="e_ti" type="time" class="inp" value="${esc(u.turno ? u.turno.inicio.padStart(5,'0') : '07:00')}"></div>
-      <div><label class="l">Turno fin</label><input id="e_tf" type="time" class="inp" value="${esc(u.turno ? u.turno.fin.padStart(5,'0') : '15:00')}"></div></div>
-    <label class="l">Nueva contraseña (déjala vacía para no cambiarla)</label><input id="e_pass" class="inp">
-    <label class="l"><input type="checkbox" id="e_act" ${u.activo === false ? '' : 'checked'}> Usuario activo</label>
-    <div class="flex flex-wrap gap-2 mt-4"><button class="btn" data-a="guardaUser" data-u="${esc(u.usuario)}">Guardar</button>
-      <button class="btn btnr" data-a="borraUser" data-u="${esc(u.usuario)}">Eliminar</button><button class="btn btn2" data-a="cerrar">Cancelar</button></div>`);
-}
-
-// ---------- KPI ----------
-async function pintaKpi(){
-  const P = [['hoy','Hoy'],['ayer','Ayer'],['semana','Esta semana'],['mes','Este mes'],['todas','Todas'],['personalizado','Personalizado']];
-  $('#pane').innerHTML = `<div class="flex flex-wrap gap-2 mb-3 items-center">${P.map(([k,n]) => `<span class="chip ${k === kpiP ? 'on' : ''}" data-a="kpiP" data-p="${k}">${n}</span>`).join('')}
-    ${kpiP === 'personalizado' ? `<input type="date" id="kd" class="inp" style="width:auto" value="${kpiD}"><input type="date" id="kh" class="inp" style="width:auto" value="${kpiH}"><button class="btn btns" data-a="kpiAplica">Aplicar</button>` : ''}</div><div id="kbody" class="text-slate-500">Cargando...</div>`;
-  try {
-    const q = `?periodo=${kpiP}&desde=${kpiD}&hasta=${kpiH}`, k = await api('/kpi' + q), t = k.total;
-    const card = (l, v, s = '') => `<div class="card"><div class="text-xs text-slate-500">${l}</div><div class="text-2xl font-bold">${v}</div><div class="text-xs text-slate-500">${s}</div></div>`;
-    const tb = (tit, l) => `<div class="card mb-4"><h3 class="font-semibold mb-2">${tit}</h3><div class="wrap"><table><thead><tr><th>${tit.includes('técnico') ? 'Técnico' : 'Motivo'}</th><th>Servicios</th><th>Completados</th><th>En curso</th><th>Sin abrir</th><th>Promedio</th><th>Mediana</th></tr></thead><tbody>
-      ${l.map(x => `<tr><td>${esc(x.nombre)}</td><td>${x.servicios}</td><td>${x.completados}</td><td>${x.enCurso}</td><td>${x.sinAbrir}</td><td>${fmtMin(x.prom)}</td><td>${fmtMin(x.mediana)}</td></tr>`).join('') || '<tr><td colspan="7" class="text-slate-500">Sin datos en este periodo.</td></tr>'}</tbody></table></div></div>`;
-    $('#kbody').outerHTML = `<div id="kbody"><div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">${card('Servicios', t.servicios)}${card('Completados', t.completados, 'firmados por el cliente')}${card('En curso', t.enCurso, '· ' + t.sinAbrir + ' sin abrir')}${card('Tiempo de servicio', fmtMin(t.prom), 'promedio · mediana ' + fmtMin(t.mediana))}</div>${tb('Por técnico', k.porTecnico)}${tb('Por motivo', k.porMotivo)}</div>`;
-  } catch(e){ $('#kbody').textContent = e.message; }
-}
-
-// ---------- Salud de equipos ----------
-async function pintaSalud(forzar){
-  $('#pane').innerHTML = '<p class="text-slate-500">Consultando Geotab...</p>';
-  try { S.salud = await api('/salud' + (forzar ? '?forzar=1' : '')); } catch(e){ $('#pane').innerHTML = `<div class="card text-red-700">${esc(e.message)}</div>`; return; }
-  if (!S.salud.configurado){ $('#pane').innerHTML = `<div class="card"><h2 class="font-bold text-lg">Salud de equipos</h2><p class="text-sm mt-2">Geotab todavía no está conectado. Agrega en Render las variables <b>GEOTAB_DATABASE</b>, <b>GEOTAB_USER</b> y <b>GEOTAB_PASSWORD</b> y vuelve a entrar.</p></div>`; return; }
-  pintaSaludTabla(true);
-}
-function pintaSaludTabla(full){
-  const U = S.salud.unidades, n = U.length, cnt = c => U.filter(u => u.categoria === c).length;
-  const ok = cnt('OK'), crit = U.filter(u => u.categoria.startsWith('Crítico')).length;
-  const q = saludQ.toLowerCase(), l = U.filter(u => (!saludCat || u.categoria === saludCat) && (!q || [u.nombre, u.serie, u.vin, u.placas].join(' ').toLowerCase().includes(q)));
-  if (full) $('#pane').innerHTML = `<div class="grid grid-cols-3 gap-3 mb-3">
-      <div class="card"><div class="text-xs text-slate-500">Unidades totales</div><div class="text-2xl font-bold">${n}</div></div>
-      <div class="card"><div class="text-xs text-slate-500">GPS al día</div><div class="text-2xl font-bold">${n ? Math.round(ok * 100 / n) : 0}%</div></div>
-      <div class="card"><div class="text-xs text-slate-500">Críticas GPS</div><div class="text-2xl font-bold">${crit}</div></div></div>
-    <div class="card"><div class="flex flex-wrap gap-2 items-center mb-3">
-      <span class="chip ${saludCat === '' ? 'on' : ''}" data-a="saludCat" data-c="">Todas (${n})</span>
-      ${cfg.categorias.map(([c, d]) => `<span class="chip ${saludCat === c ? 'on' : ''}" data-a="saludCat" data-c="${c}" title="${esc(d)}">${c} (${cnt(c)})</span>`).join('')}
-      <input id="sq" class="inp" style="max-width:240px;margin-left:auto" placeholder="Buscar unidad, serie, VIN..." value="${esc(saludQ)}">
-      <button class="btn btn2 btns" data-a="saludXls"><i class="fa fa-file-excel"></i></button><button class="btn btn2 btns" data-a="saludRef"><i class="fa fa-rotate"></i></button></div>
-      <p class="text-xs text-slate-500 mb-2">Actualizado: ${fmtTs(S.salud.actualizado)} · se refresca cada 60 minutos. Solo GPS/GO9: la salud de cámaras no está disponible en Geotab.</p>
-      <div id="stbl" class="wrap"></div></div>`;
-  document.querySelectorAll('[data-a="saludCat"]').forEach(e => e.classList.toggle('on', e.dataset.c === saludCat));
-  const sq = $('#sq'); if (sq && !sq._b){ sq._b = 1; sq.addEventListener('input', e => { saludQ = e.target.value; pintaSaludTabla(false); }); }
-  $('#stbl').innerHTML = `<table><thead><tr><th>Unidad</th><th>Serie GO9</th><th>VIN</th><th>Placas</th><th>Última comunicación</th><th>Días</th><th>Categoría</th></tr></thead><tbody>
-    ${l.slice(0, 1000).map(u => `<tr><td>${esc(u.nombre)}</td><td>${esc(u.serie)}</td><td>${esc(u.vin)}</td><td>${esc(u.placas)}</td><td>${fmtTs(u.ultima && Date.parse(u.ultima))}</td><td>${u.dias ?? '—'}</td><td>${bd(u.categoria)}</td></tr>`).join('') || '<tr><td colspan="7" class="text-slate-500">Sin resultados.</td></tr>'}</tbody></table>`;
-}
-
-// ---------- Acciones (delegación de eventos) ----------
-const A = {
-  tab: d => irTab(d.t), salir, miPass: () => miPass(false), cerrar, cerrarBg: (d, e) => { if (e.target.classList.contains('modalbg')) cerrar(); },
-  filtro: d => { filtro = d.f; pintaServ(); }, detalle: d => detalle(d.f), exportaServ,
-  capturar: async d => { capFolio = d.f; await abrirSi(d.f); irTab('capturar'); },
-  creaServ: (d, e, b) => creaServ(b), importa: (d, e, b) => importa(b),
-  borraServ: async d => { if (!confirm('¿Eliminar el servicio ' + d.f + '?')) return; try { await api('/servicios/' + encodeURIComponent(d.f), { method:'DELETE' }); await cargaServ(); pintaTablaServ(); toast('Eliminado'); } catch(e){ toast(e.message, 1); } },
-  limpiaSig: d => limpiaSig(d.s),
-  guardaPass: async () => { try { await api('/yo/password', { method:'PUT', body:{ actual:$('#pa').value, nueva:$('#pn').value } }); toast('Contraseña actualizada'); if (me) me.debeCambiar = false; cerrar(); } catch(e){ toast(e.message, 1); } },
-  pedirVal: d => pedirVal(d.f),
-  enviaVal: async d => { try { await api('/validaciones', { method:'POST', body:{ folio:d.f, nota:$('#vn').value } }); cerrar(); toast('Solicitud enviada a soporte'); } catch(e){ toast(e.message, 1); } },
-  atender: async d => { try { await api('/validaciones/' + d.i + '/atender', { method:'PUT' }); } catch(e){ toast(e.message, 1); } await cargaVals(); cargaTurno(); pintaSolic(); },
-  resolver: d => resolver(d.i),
-  guardaRes: async d => { try { await api('/validaciones/' + d.i + '/resolver', { method:'PUT', body:{ resultado:$('#rr').value, comentario:$('#rc').value } }); cerrar(); toast('Solicitud resuelta'); } catch(e){ toast(e.message, 1); } await cargaVals(); cargaTurno(); pintaSolic(); },
-  borraVal: async d => { if (!confirm('¿Eliminar esta solicitud?')) return; try { await api('/validaciones/' + d.i, { method:'DELETE' }); } catch(e){ toast(e.message, 1); } await cargaVals(); pintaSolic(); },
-  creaUser: (d, e, b) => creaUser(b), editaUser: d => editaUser(d.u),
-  guardaUser: async d => {
-    const rol = $('#e_rol').value, body = { nombre:$('#e_nombre').value, rol, activo:$('#e_act').checked };
-    if ($('#e_pass').value) body.password = $('#e_pass').value;
-    if (rol === 'soporte'){ body.turnoInicio = $('#e_ti').value; body.turnoFin = $('#e_tf').value; }
-    try { await api('/usuarios/' + encodeURIComponent(d.u), { method:'PUT', body }); cerrar(); toast('Usuario actualizado'); await cargaUsuarios(); pintaUsers(); cargaTurno(); } catch(e){ toast(e.message, 1); }
-  },
-  borraUser: async d => { if (!confirm('¿Eliminar al usuario ' + d.u + '? Mejor desactívalo si quieres conservar su historial.')) return;
-    try { await api('/usuarios/' + encodeURIComponent(d.u), { method:'DELETE' }); cerrar(); toast('Usuario eliminado'); await cargaUsuarios(); pintaUsers(); } catch(e){ toast(e.message, 1); } },
-  kpiP: d => { kpiP = d.p; pintaKpi(); }, kpiAplica: () => { kpiD = $('#kd').value; kpiH = $('#kh').value; pintaKpi(); },
-  saludCat: d => { saludCat = d.c; pintaSaludTabla(false); }, saludRef: () => pintaSalud(true),
-  saludXls: () => { const q = saludQ.toLowerCase(); bajaXlsx((S.salud.unidades || []).filter(u => (!saludCat || u.categoria === saludCat) && (!q || [u.nombre, u.serie, u.vin, u.placas].join(' ').toLowerCase().includes(q)))
-    .map(u => ({ Unidad:u.nombre, 'Serie GO9':u.serie, VIN:u.vin, Placas:u.placas, 'Última comunicación':u.ultima || '', Días:u.dias ?? '', Categoría:u.categoria })), 'Salud', 'salud_equipos.xlsx'); }
+$('xl').onchange=async e=>{
+ const fd=new FormData();fd.append('archivo',e.target.files[0]);e.target.value='';
+ const d=await api('/api/servicios/importar',{method:'POST',body:fd});
+ if(!d.exito)return toast(d.error,1);
+ toast(`${d.cargados} servicios cargados · ${d.repetidos} repetidos · filas incompletas: ${d.filasIncompletas.join(', ')||'ninguna'}`);cargarServicios();
 };
-document.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b && A[b.dataset.a]) A[b.dataset.a](b.dataset, e, b); });
-init();
+function pintarKPI(){
+ if(!me||me.rol!=='coord')return;
+ const T=servicios.length,C=servicios.filter(s=>s.estatus==='Completado').length,P=T-C,card=(l,v,c='text-slate-800')=>`<div class="bg-white p-5 rounded-xl border shadow-sm"><div class="text-slate-400 text-xs font-bold uppercase">${l}</div><div class="text-3xl font-black ${c} mt-1">${v}</div></div>`;
+ $('kpi-cards').innerHTML=card('Servicios',T)+card('Completados',C,'text-emerald-600')+card('Pendientes',P,'text-blue-600')+card('Efectividad',T?Math.round(C*100/T)+'%':'—','text-orange-500');
+ const grupo=k=>{const m={};servicios.forEach(s=>{const x=m[s[k]||'—']=m[s[k]||'—']||[0,0];x[0]++;if(s.estatus==='Completado')x[1]++});return Object.entries(m).sort((a,b)=>b[1][0]-a[1][0]).map(([n,[t,c]])=>`<tr><td class="py-2 font-semibold">${E(n)}</td><td>${t}</td><td>${c}</td><td>${t-c}</td></tr>`).join('')||'<tr><td class="py-3 text-slate-400">Sin datos</td></tr>'};
+ $('kpi-tec').innerHTML=grupo('tecnico');$('kpi-mot').innerHTML=grupo('motivo');
+}
+
+// ---------- Instaladores ----------
+async function cargarTecnicos(){
+ const d=await api('/api/instaladores');if(!d.exito)return;
+ $('sel-tec').innerHTML=d.instaladores.map(i=>`<option>${E(i.nombre)}</option>`).join('');
+ $('sel-mot').innerHTML=MOT.map(m=>`<option>${m}</option>`).join('');
+ $('lista-tec').innerHTML=['ALEXANDER - COL','ANGEL ZACARIAS - NORTE','ANTONIO PEREZ - SUR','ARMANDO GUTIERREZ - SUR','CARLOS LEAL - NORTE','CESAR SANCHEZ - CENTRO','DAVID RIVERA - CENTRO','FROYLAND CRUZ - NORTE','HECTOR FLORES - NORTE','JOSE PABLO GONZALEZ - CENTRO','MIGUEL GARCIA - NORTE','RODRIGO SANCHEZ - CENTRO','ROMAN HERVERT - CENTRO','VICTOR MENDOZA - CENTRO','YAEL FLORES - CENTRO'].map(n=>`<option value="${n}">`).join('');
+ return d.instaladores;
+}
+async function cargarInstaladores(){
+ await cargarTecnicos();const l=((await api('/api/usuarios')).usuarios)||[];
+ $('tabla-inst').innerHTML=l.length?l.map(i=>`<tr><td class="p-3 font-bold">${E(i.nombre)}</td><td class="p-3">${i.rol==='coord'?'Coordinador':'Técnico'}</td><td class="p-3">${E(i.usuario)}</td>
+  <td class="p-3"><div class="flex gap-2"><input id="pw-${E(i.usuario)}" placeholder="Nueva contraseña" class="inp !py-1"><button data-u="${E(i.usuario)}" onclick="cambiarPass(this.dataset.u)" class="px-3 text-xs font-bold bg-slate-800 text-white rounded-lg">Cambiar</button></div></td>
+  <td class="p-3"><button data-u="${E(i.usuario)}" onclick="borrarInst(this.dataset.u)" class="text-red-500 text-xs font-bold">Eliminar</button></td></tr>`).join('')
+  :'<tr><td colspan="5" class="p-4 text-center text-slate-500">Aún no hay usuarios.</td></tr>';
+}
+async function altaInstalador(e){
+ e.preventDefault();
+ const d=await enviar('/api/instaladores',{nombre:$('n-nombre').value,usuario:$('n-usuario').value,password:$('n-pass').value,rol:$('n-rol').value});
+ if(!d.exito)return toast(d.error,1);
+ toast('Usuario dado de alta');['n-nombre','n-usuario','n-pass'].forEach(i=>$(i).value='');cargarInstaladores();
+}
+async function cambiarPass(u){const p=$('pw-'+u).value,d=await enviar('/api/instaladores/'+encodeURIComponent(u),{password:p},'PUT');toast(d.exito?'Contraseña cambiada':d.error,!d.exito)}
+async function borrarInst(u){if(confirm('¿Eliminar al usuario '+u+'?')){const d=await api('/api/usuarios/'+encodeURIComponent(u),{method:'DELETE'});if(!d.exito)toast(d.error,1);cargarInstaladores()}}
+
+// ---------- Técnico ----------
+function pintarTec(){
+ if(!me||me.rol!=='tec')return;
+ $('lista-tec-servicios').innerHTML=servicios.length?servicios.map(s=>`<div class="bg-white p-4 rounded-xl border shadow-sm flex flex-wrap gap-3 justify-between items-center">
+  <div><span class="font-bold text-sm">${E(s.folio)} · ${E(s.motivo)}</span><div class="text-xs text-slate-500">${E(s.cliente)} — ${E(s.lugar)}</div><div class="text-xs text-slate-400">Visita ${E(s.fecha)} ${E(s.hora)} · ${E(s.estatus)}</div></div>
+  ${s.urlDoc?`<a href="${E(s.urlDoc)}" download class="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg">Descargar PDF</a>`
+   :`<button data-f="${E(s.folio)}" onclick="elegir(this.dataset.f)" class="px-4 py-2 bg-brandOrange text-white text-xs font-bold rounded-lg shadow">Llenar ODS y fotos</button>`}</div>`).join('')
+  :'<div class="p-4 bg-white rounded-xl border text-slate-500 text-xs">No tienes servicios asignados.</div>';
+}
+function elegir(f){
+ const s=servicios.find(x=>x.folio===f);$('input-folio').value=f;
+ $('resumen').innerHTML=`<b class="text-slate-700">${E(f)}</b> · ${E(s.motivo)} · ${E(s.cliente)}<br>${E(s.lugar)}, ${E(s.ciudad)}<br>Recibe: ${E(s.recibe)}`;
+ $('firma-nombre').value=s.recibe||'';$('resultado').classList.add('hidden');tab('tab-captura');
+}
+
+// Firmas
+function pad(c){
+ const x=c.getContext('2d');x.lineWidth=2.4;x.lineCap='round';let d=false;
+ const p=e=>{const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]};
+ c.onpointerdown=e=>{d=true;c.setPointerCapture(e.pointerId);x.beginPath();x.moveTo(...p(e))};
+ c.onpointermove=e=>{if(d){x.lineTo(...p(e));x.stroke();c.dataset.f=1}};
+ c.onpointerup=()=>d=false;
+}
+function limpiar(id){const c=$(id);c.getContext('2d').clearRect(0,0,c.width,c.height);delete c.dataset.f}
+['firma-cliente','firma-tecnico'].forEach(i=>pad($(i)));
+
+// Fotos: se reducen a JPEG para subir rápido y que el PDF compatible
+const comprimir=f=>new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const k=Math.min(1,1600/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(i.src);c.toBlob(b=>ok(b),'image/jpeg',.8)};i.onerror=()=>no(new Error('No se pudo leer la foto '+f.name));i.src=URL.createObjectURL(f)});
+
+async function enviarODS(e){
+ e.preventDefault();const f=$('form-ods'),b=$('btn-ods'),c1=$('firma-cliente'),c2=$('firma-tecnico');
+ if(!$('input-folio').value)return toast('Primero elige un servicio en «Mis servicios»',1);
+ if(!c1.dataset.f||!c2.dataset.f)return toast('Faltan las firmas del cliente y del técnico',1);
+ b.disabled=true;b.textContent='Generando PDF…';
+ try{
+  const fd=new FormData();
+  new FormData(f).forEach((v,k)=>{if(!(v instanceof File))fd.append(k,v)});
+  for(const inp of f.querySelectorAll('input[type=file]'))for(const [i,file] of [...inp.files].entries())fd.append(inp.name,await comprimir(file),`${inp.name}_${i}.jpg`);
+  fd.append('firmaCliente',c1.toDataURL('image/png'));fd.append('firmaTecnico',c2.toDataURL('image/png'));fd.append('nombreCliente',$('firma-nombre').value);
+  const d=await api('/api/generar-ods',{method:'POST',body:fd});
+  if(!d.exito)throw new Error(d.error||'No se pudo generar el PDF');
+  const l=$('link-pdf');l.href=d.descargaUrl;l.setAttribute('download','ODS_'+$('input-folio').value+'.pdf');$('resultado').classList.remove('hidden');l.click();
+  f.reset();document.querySelectorAll('.prev').forEach(p=>p.innerHTML='');limpiar('firma-cliente');limpiar('firma-tecnico');$('input-folio').value='';$('resumen').textContent='Servicio completado. Elige otro en «Mis servicios».';
+ }catch(x){toast('Error: '+x.message,1)}
+ finally{b.disabled=false;b.textContent='Generar y descargar ODS en PDF'}
+}
+
+// ---------- Modal, contraseña, detalle, exportar y vista previa de fotos ----------
+function abrirModal(h){$('modal-body').innerHTML=h;$('modal').classList.remove('hidden')}
+function cerrarModal(){$('modal').classList.add('hidden')}
+function modalPass(forzado){
+ abrirModal(`<h3 class="text-lg font-black mb-1">Cambiar contraseña</h3>
+ <p class="text-xs text-slate-500 mb-4">${forzado?'Por seguridad debes cambiar la contraseña inicial antes de continuar.':'Mínimo 8 caracteres.'}</p>
+ <form onsubmit="guardarPass(event)" class="space-y-3">
+  <input id="p-act" type="password" required placeholder="Contraseña actual" autocomplete="current-password" class="inp">
+  <input id="p-new" type="password" required minlength="8" placeholder="Nueva contraseña (mín. 8)" autocomplete="new-password" class="inp">
+  <input id="p-rep" type="password" required placeholder="Repite la nueva contraseña" autocomplete="new-password" class="inp">
+  <div class="flex gap-2"><button class="flex-1 py-2.5 bg-brandOrange text-white font-bold rounded-lg">Guardar</button>${forzado?'':'<button type="button" onclick="cerrarModal()" class="px-4 border rounded-lg">Cancelar</button>'}</div>
+ </form>`);
+}
+async function guardarPass(e){
+ e.preventDefault();
+ if($('p-new').value!==$('p-rep').value)return toast('Las contraseñas nuevas no coinciden',1);
+ const d=await enviar('/api/yo/password',{actual:$('p-act').value,nueva:$('p-new').value},'PUT');
+ if(!d.exito)return toast(d.error,1);
+ cerrarModal();toast('Contraseña actualizada');
+}
+function verServicio(f){
+ const s=servicios.find(x=>x.folio===f);if(!s)return;
+ const r=(l,v)=>`<div><div class="text-[11px] text-slate-400 font-semibold">${l}</div><div class="text-sm font-semibold break-words">${E(v)||'—'}</div></div>`;
+ abrirModal(`<div class="flex justify-between items-start mb-4"><div><div class="text-xs text-slate-400">Folio acuerdo</div><h3 class="text-xl font-black">${E(s.folio)}</h3></div><button onclick="cerrarModal()" class="text-slate-400 text-2xl leading-none" aria-label="Cerrar">&times;</button></div>
+ <div class="grid grid-cols-2 gap-3">${r('Estatus',s.estatus)}${r('Motivo',s.motivo)}${r('Visita',s.fecha+' '+(s.hora||''))}${r('Técnico',s.tecnico)}${r('Cliente',s.cliente)}${r('Razón social',s.razon)}<div class="col-span-2">${r('Lugar de atención',s.lugar)}</div>${r('Recibe al técnico',s.recibe)}${r('Contacto',s.contacto)}${r('Ciudad',s.ciudad)}${r('Estado',s.edo)}</div>
+ <h4 class="text-xs font-bold uppercase text-slate-500 mt-5 mb-2">Equipo instalado</h4>
+ <div class="grid grid-cols-2 gap-3">${r('Serie GO9',s.serie)}${r('IMEI cámara',s.imei)}${r('SIM',s.sim)}${r('Arnés',s.arnes)}${r('Marca',s.marca)}${r('Modelo',s.modelo)}${r('Placas',s.placas)}${r('VIN',s.vin)}</div>
+ ${s.comentario?`<div class="mt-3">${r('Comentario del técnico',s.comentario)}</div>`:''}
+ ${s.urlDoc?`<a href="${E(s.urlDoc)}" download class="mt-5 block text-center py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-lg">Descargar PDF</a>`:''}`);
+}
+function exportar(){
+ const rows=filtrados().map(s=>({'Folio acuerdo':s.folio,'Fecha':s.fecha,'Hora':s.hora,'Motivo':s.motivo,'Cliente':s.cliente,'Razón social':s.razon,'Lugar de atención':s.lugar,'Ciudad':s.ciudad,'Estado':s.edo,'Técnico':s.tecnico,'Estatus':s.estatus,'Serie GO9':s.serie||'','IMEI cámara':s.imei||'','SIM':s.sim||'','Arnés':s.arnes||'','Marca':s.marca||'','Modelo':s.modelo||'','VIN':s.vin||'','Placas':s.placas||''}));
+ if(!rows.length)return toast('No hay servicios para exportar',1);
+ const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Servicios');
+ XLSX.writeFile(wb,'servicios_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+document.addEventListener('change',e=>{
+ const i=e.target;if(i.type!=='file'||!(i.name||'').startsWith('foto_'))return;
+ let p=i.parentElement.querySelector('.prev');if(!p){p=document.createElement('div');p.className='prev flex gap-2 flex-wrap mt-2';i.parentElement.appendChild(p)}
+ p.innerHTML=[...i.files].map(f=>`<img src="${URL.createObjectURL(f)}" alt="Vista previa" class="h-16 w-16 object-cover rounded-lg border">`).join('');
+});
+
+// Restaurar sesión
+if(localStorage.getItem('tk'))api('/api/yo').then(d=>d.exito&&entrar(d.usuario)).catch(()=>{});
 </script>
 </body>
 </html>
