@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADF Control</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  body{background:#f1f5f9;color:#0f172a}
+  .card{background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:16px}
+  .inp{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:9px 11px;font-size:15px;background:#fff}
+  .inp:focus{outline:2px solid #00A9E0;border-color:#00A9E0}
+  label.l{display:block;font-size:12px;color:#475569;margin:10px 0 3px;font-weight:600}
+  .btn{background:#00A9E0;color:#fff;border-radius:10px;padding:9px 16px;font-weight:600;font-size:14px;cursor:pointer;border:0}
+  .btn:hover{background:#0090c0}.btn:disabled{opacity:.5;cursor:wait}
+  .btn2{background:#e2e8f0;color:#0f172a}.btn2:hover{background:#cbd5e1}
+  .btnr{background:#dc2626}.btnr:hover{background:#b91c1c}
+  .btns{padding:5px 10px;font-size:12px;border-radius:8px}
+  .tab{white-space:nowrap;padding:10px 14px;font-size:14px;font-weight:600;color:#475569;border-bottom:3px solid transparent;cursor:pointer}
+  .tab.on{color:#00A9E0;border-color:#00A9E0}
+  .chip{padding:5px 12px;border-radius:999px;background:#e2e8f0;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .chip.on{background:#00A9E0;color:#fff}
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;font-size:12px;color:#475569;padding:8px;border-bottom:2px solid #e2e8f0;white-space:nowrap}
+  td{padding:8px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+  .wrap{overflow-x:auto}
+  canvas.sig{width:100%;height:140px;border:1px dashed #94a3b8;border-radius:10px;background:#fff;touch-action:none}
+  .modalbg{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:14px;z-index:50}
+  .modal{background:#fff;border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:18px}
+  .tabs{overflow-x:auto;display:flex;background:#fff;border-bottom:1px solid #e2e8f0}
+</style>
+</head>
+<body>
+<div id="toast" class="fixed top-3 left-1/2 -translate-x-1/2 z-[60] hidden px-4 py-2 rounded-lg text-white text-sm shadow-lg"></div>
+
+<!-- LOGIN -->
+<div id="login" class="min-h-screen flex items-center justify-center p-4 hidden">
+  <form id="fLogin" class="card w-full max-w-sm">
+    <div class="text-center mb-3">
+      <img src="logo-att.png" onerror="this.style.display='none'" class="h-12 mx-auto mb-2" alt="">
+      <h1 class="text-xl font-bold app-name">ADF Control</h1>
+      <p class="text-sm text-slate-500">Validación de servicios y seguimiento de la flota</p>
+    </div>
+    <label class="l">Usuario</label><input id="lu" class="inp" autocapitalize="none" autocomplete="username" required>
+    <label class="l">Contraseña</label><input id="lp" type="password" class="inp" autocomplete="current-password" required>
+    <p id="lerr" class="text-red-600 text-sm mt-2"></p>
+    <button class="btn w-full mt-3">Entrar</button>
+  </form>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <header class="bg-white border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+      <img src="logo-att.png" onerror="this.style.display='none'" class="h-8" alt="">
+      <div class="flex-1 min-w-0"><div class="font-bold app-name truncate">ADF Control</div><div id="who" class="text-xs text-slate-500 truncate"></div></div>
+      <button class="btn btn2 btns" data-a="miPass"><i class="fa fa-key"></i><span class="hidden sm:inline"> Contraseña</span></button>
+      <button class="btn btn2 btns" data-a="salir"><i class="fa fa-right-from-bracket"></i><span class="hidden sm:inline"> Salir</span></button>
+    </div>
+    <div id="banner" class="text-sm px-4 py-2 bg-cyan-50 text-cyan-900 border-t border-cyan-100"></div>
+  </header>
+  <nav class="tabs"><div id="tabs" class="flex max-w-6xl mx-auto w-full"></div></nav>
+  <main id="pane" class="max-w-6xl mx-auto p-4"></main>
+</div>
+<div id="modal"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ls = { get(k){ try { return localStorage.getItem(k) || '' } catch(e){ return '' } }, set(k,v){ try { v ? localStorage.setItem(k,v) : localStorage.removeItem(k) } catch(e){} } };
+let token = ls.get('adf_tk'), me = null, cfg = { nombre:'ADF Control', motivos:[], elec:[], categorias:[], geotab:false };
+let S = { servicios:[], vals:[], usuarios:[], salud:null }, tab = '', filtro = 'Todos', busca = '', capFolio = '', saludCat = '', saludQ = '', kpiP = 'mes', kpiD = '', kpiH = '';
+const ROL = { coord:'Coordinador', tec:'Técnico', soporte:'Soporte' };
+const TABS = {
+  coord:[['servicios','Servicios'],['nuevo','Nuevo servicio'],['solic','Solicitudes'],['usuarios','Usuarios'],['kpi','KPI'],['salud','Salud de equipos']],
+  soporte:[['solic','Solicitudes'],['servicios','Servicios'],['kpi','KPI'],['salud','Salud de equipos']],
+  tec:[['servicios','Mis servicios'],['capturar','Capturar ODS'],['solic','Solicitudes']] };
+
+function toast(m, err){ const t = $('#toast'); t.textContent = m; t.className = 'fixed top-3 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-lg text-white text-sm shadow-lg ' + (err ? 'bg-red-600' : 'bg-emerald-600'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.add('hidden'), 3500); }
+async function api(p, o = {}){
+  const h = {}; if (token) h.Authorization = 'Bearer ' + token;
+  let body = o.body; if (body && !(body instanceof FormData)){ h['Content-Type'] = 'application/json'; body = JSON.stringify(body); }
+  const r = await fetch('/api' + p, { method:o.method || 'GET', headers:h, body });
+  let d = {}; try { d = await r.json(); } catch(e){}
+  if (r.status === 401 && token && p !== '/login'){ salir(); throw new Error('Tu sesión venció, entra de nuevo'); }
+  if (!r.ok || d.exito === false) throw new Error(d.error || ('Error ' + r.status));
+  return d;
+}
+const fmtMin = m => m == null ? '—' : m < 1 ? '<1 min' : m < 60 ? m + ' min' : Math.floor(m/60) + ' h ' + (m%60) + ' min';
+const fmtTs = t => t ? new Date(t).toLocaleString('es-MX', { timeZone:'America/Mexico_City', dateStyle:'short', timeStyle:'short' }) : '—';
+const hoyMx = () => new Date(Date.now() - 6*3600e3).toISOString().slice(0,10);
+const badge = (txt, col) => `<span class="badge" style="background:${col[0]};color:${col[1]}">${esc(txt)}</span>`;
+const COL = { 'Enviado':['#e2e8f0','#334155'], 'En curso':['#fef3c7','#92400e'], 'Completado':['#d1fae5','#065f46'],
+  'Pendiente':['#fee2e2','#991b1b'], 'En atención':['#fef3c7','#92400e'], 'Validada':['#d1fae5','#065f46'], 'Con observaciones':['#ffedd5','#9a3412'],
+  'OK':['#d1fae5','#065f46'], 'Advertencia':['#fef3c7','#92400e'], 'Crítico':['#fed7aa','#9a3412'], 'Crítico alto':['#fecaca','#991b1b'], 'Crítico severo':['#7f1d1d','#fff'], 'Desconocido':['#e2e8f0','#334155'] };
+const bd = e => badge(e, COL[e] || COL.Enviado);
+
+function modal(html){ $('#modal').innerHTML = `<div class="modalbg" data-a="cerrarBg"><div class="modal">${html}</div></div>`; }
+function cerrar(){ $('#modal').innerHTML = ''; }
+
+// ---------- Sesión ----------
+async function init(){
+  try { cfg = (await api('/config')); document.title = cfg.nombre; document.querySelectorAll('.app-name').forEach(e => e.textContent = cfg.nombre); } catch(e){}
+  if (token){ try { me = (await api('/yo')).usuario; return entrar(); } catch(e){} }
+  $('#login').classList.remove('hidden');
+}
+$('#fLogin').addEventListener('submit', async e => {
+  e.preventDefault(); $('#lerr').textContent = '';
+  try { const d = await api('/login', { method:'POST', body:{ usuario:$('#lu').value, password:$('#lp').value } });
+    token = d.token; ls.set('adf_tk', token); me = d.usuario; $('#lp').value = ''; entrar();
+  } catch(err){ $('#lerr').textContent = err.message; }
+});
+function salir(){ token = ''; ls.set('adf_tk',''); me = null; clearInterval(window._iv); $('#app').classList.add('hidden'); $('#login').classList.remove('hidden'); cerrar(); }
+async function entrar(){
+  $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
+  $('#who').textContent = me.nombre + ' · ' + ROL[me.rol];
+  $('#tabs').innerHTML = TABS[me.rol].map(([k,n]) => `<div class="tab" data-a="tab" data-t="${k}">${n}</div>`).join('');
+  if (me.debeCambiar) miPass(true);
+  await Promise.all([cargaServ(), cargaVals(), cargaTurno()]);
+  if (me.rol === 'coord') cargaUsuarios().catch(() => {});
+  irTab(TABS[me.rol][0][0]);
+  clearInterval(window._iv); window._iv = setInterval(async () => { if (!token) return; await cargaTurno(); if (tab === 'solic'){ await cargaVals(); pintaSolic(); } }, 30000);
+}
+function miPass(forzado){
+  modal(`<h3 class="font-bold text-lg mb-1">Cambiar contraseña</h3>${forzado ? '<p class="text-sm text-amber-700">Estás usando la contraseña inicial. Cámbiala para continuar.</p>' : ''}
+    <label class="l">Contraseña actual</label><input id="pa" type="password" class="inp">
+    <label class="l">Nueva contraseña (mínimo 8 caracteres)</label><input id="pn" type="password" class="inp">
+    <div class="flex gap-2 mt-4"><button class="btn" data-a="guardaPass">Guardar</button>${forzado ? '' : '<button class="btn btn2" data-a="cerrar">Cancelar</button>'}</div>`);
+}
+
+// ---------- Datos ----------
+async function cargaServ(){ S.servicios = (await api('/servicios')).servicios; }
+async function cargaVals(){ S.vals = (await api('/validaciones')).validaciones; }
+async function cargaUsuarios(){ S.usuarios = (await api('/usuarios')).usuarios; }
+async function cargaTurno(){
+  try { const t = (await api('/turno')).turno;
+    $('#banner').innerHTML = t.length ? '<i class="fa fa-headset"></i> <b>Soporte en turno:</b> ' + t.map(x => `${esc(x.nombre)} (${esc(x.inicio)}–${esc(x.fin)}) · atendiendo ${x.atendiendo}${x.tecnicos.length ? ' [' + x.tecnicos.map(esc).join(', ') + ']' : ''}`).join(' &nbsp;|&nbsp; ')
+      : '<i class="fa fa-headset"></i> Sin soporte en turno en este momento';
+  } catch(e){}
+}
+
+async function irTab(t){
+  tab = t;
+  document.querySelectorAll('.tab').forEach(e => e.classList.toggle('on', e.dataset.t === t));
+  const P = { servicios:pintaServ, nuevo:pintaNuevo, capturar:pintaCap, solic:pintaSolic, usuarios:pintaUsers, kpi:pintaKpi, salud:pintaSalud };
+  try {
+    if (t === 'servicios') await cargaServ();
+    if (t === 'solic' || t === 'capturar') { await cargaVals(); if (t === 'capturar') await cargaServ(); }
+    if (t === 'usuarios') await cargaUsuarios();
+    if (t === 'nuevo' && me.rol === 'coord') await cargaUsuarios();
+  } catch(e){ toast(e.message, 1); }
+  P[t]();
+}
+
+// ---------- Servicios ----------
+function pintaServ(){
+  $('#pane').innerHTML = `<div class="card">
+    <div class="flex flex-wrap gap-2 items-center mb-3">
+      ${['Todos','Enviado','En curso','Completado'].map(f => `<span class="chip ${f === filtro ? 'on' : ''}" data-a="filtro" data-f="${f}">${f === 'Enviado' ? 'Enviados' : f === 'Completado' ? 'Completados' : f}</span>`).join('')}
+      <input id="q" class="inp" style="max-width:260px;margin-left:auto" placeholder="Buscar folio, cliente, técnico..." value="${esc(busca)}">
+      ${me.rol === 'coord' ? '<button class="btn btn2 btns" data-a="exportaServ"><i class="fa fa-file-excel"></i> Exportar</button>' : ''}
+    </div><div id="tbl" class="wrap"></div></div>`;
+  $('#q').addEventListener('input', e => { busca = e.target.value; pintaTablaServ(); });
+  pintaTablaServ();
+}
+function listaServ(){
+  const q = busca.toLowerCase();
+  return S.servicios.filter(s => (filtro === 'Todos' || s.estatus === filtro) && (!q || [s.folio, s.cliente, s.tecnico, s.motivo, s.ciudad].join(' ').toLowerCase().includes(q)));
+}
+function pintaTablaServ(){
+  const l = listaServ();
+  $('#tbl').innerHTML = l.length ? `<table><thead><tr><th>Folio</th><th>Técnico</th><th>Fecha</th><th>Motivo</th><th>Cliente</th><th>Estatus</th><th>Duración</th><th></th></tr></thead><tbody>${l.map(s => `<tr>
+    <td class="font-semibold">${esc(s.folio)}</td><td>${esc(s.tecnico)}</td><td class="whitespace-nowrap">${esc(s.fecha)} ${esc(s.hora)}</td><td>${esc(s.motivo)}</td><td>${esc(s.cliente)}</td>
+    <td>${bd(s.estatus)}</td><td class="whitespace-nowrap">${fmtMin(s.duracion)}</td>
+    <td class="whitespace-nowrap text-right">
+      ${me.rol === 'tec' && s.estatus !== 'Completado' ? `<button class="btn btns" data-a="capturar" data-f="${esc(s.folio)}">${s.estatus === 'Enviado' ? 'Iniciar' : 'Continuar'}</button> ` : ''}
+      ${s.urlDoc ? `<a class="btn btn2 btns" href="${esc(s.urlDoc)}" target="_blank">PDF</a> ` : ''}
+      ${s.estatus === 'Completado' && ['tec','coord'].includes(me.rol) ? `<button class="btn btn2 btns" data-a="pedirVal" data-f="${esc(s.folio)}">Validar</button> ` : ''}
+      <button class="btn btn2 btns" data-a="detalle" data-f="${esc(s.folio)}">Ver</button>
+      ${me.rol === 'coord' ? `<button class="btn btnr btns" data-a="borraServ" data-f="${esc(s.folio)}"><i class="fa fa-trash"></i></button>` : ''}
+    </td></tr>`).join('')}</tbody></table>` : '<p class="text-slate-500 text-sm py-6 text-center">No hay servicios para mostrar.</p>';
+}
+function detalle(folio){
+  const s = S.servicios.find(x => x.folio === folio); if (!s) return;
+  const f = (l, v) => v ? `<div><div class="text-xs text-slate-500">${l}</div><div class="text-sm">${esc(v)}</div></div>` : '';
+  modal(`<div class="flex justify-between items-start"><h3 class="font-bold text-lg">${esc(s.folio)}</h3>${bd(s.estatus)}</div>
+    <div class="grid grid-cols-2 gap-3 mt-3">${f('Técnico',s.tecnico)}${f('Fecha',s.fecha + ' ' + s.hora)}${f('Motivo',s.motivo)}${f('Cliente',s.cliente)}${f('Razón social',s.razon)}${f('Lugar',s.lugar)}
+      ${f('Recibe',s.recibe)}${f('Contacto',s.contacto)}${f('Ciudad',s.ciudad)}${f('Estado',s.edo)}${f('Serie GO9',s.serie)}${f('IMEI cámara',s.imei)}${f('SIM',s.sim)}${f('Arnés',s.arnes)}
+      ${f('Vehículo',[s.marca,s.modelo].filter(Boolean).join(' '))}${f('Placas',s.placas)}${f('VIN',s.vin)}${f('Duración',s.duracion != null ? fmtMin(s.duracion) : '')}
+      ${f('Abierto',s.abiertoEn ? fmtTs(s.abiertoEn) : '')}${f('Completado',s.completadoEn ? fmtTs(s.completadoEn) : '')}</div>
+    ${s.comentario ? `<div class="mt-3">${f('Comentario del técnico', s.comentario)}</div>` : ''}
+    ${s.elec ? `<div class="mt-3 text-xs text-slate-500">Partes eléctricas</div><div class="grid grid-cols-2 gap-x-3 text-sm">${Object.entries(s.elec).map(([k,v]) => `<div>${esc(k)}: <b>${esc(v)}</b></div>`).join('')}</div>${s.obsElec ? `<div class="mt-2 text-sm">Obs.: ${esc(s.obsElec)}</div>` : ''}` : ''}
+    <div class="flex gap-2 mt-4">${s.urlDoc ? `<a class="btn" href="${esc(s.urlDoc)}" target="_blank">Abrir PDF</a>` : ''}<button class="btn btn2" data-a="cerrar">Cerrar</button></div>`);
+}
+function exportaServ(){
+  const rows = S.servicios.map(s => ({ Folio:s.folio, Técnico:s.tecnico, Fecha:s.fecha, Hora:s.hora, Motivo:s.motivo, Cliente:s.cliente, 'Razón social':s.razon, Lugar:s.lugar, Ciudad:s.ciudad, Estado:s.edo,
+    Estatus:s.estatus, 'Duración (min)':s.duracion ?? '', 'Serie GO9':s.serie || '', VIN:s.vin || '', Placas:s.placas || '' }));
+  bajaXlsx(rows, 'Servicios', 'servicios.xlsx');
+}
+function bajaXlsx(rows, hoja, nombre){
+  if (typeof XLSX === 'undefined') return toast('No se pudo cargar el generador de Excel', 1);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), hoja); XLSX.writeFile(wb, nombre);
+}
+
+// ---------- Nuevo servicio (coordinador) ----------
+function pintaNuevo(){
+  const tecs = S.usuarios.filter(u => u.rol === 'tec' && u.activo !== false);
+  const inp = (id, l, ex = '') => `<div><label class="l">${l}</label><input id="n_${id}" class="inp" ${ex}></div>`;
+  $('#pane').innerHTML = `<div class="card"><h2 class="font-bold text-lg">Nuevo servicio</h2>
+    <div class="grid sm:grid-cols-2 gap-x-4">
+      ${inp('folio','Folio de acuerdo *')}
+      <div><label class="l">Técnico asignado *</label><select id="n_tec" class="inp"><option value="">Selecciona...</option>${tecs.map(u => `<option>${esc(u.nombre)}</option>`).join('')}</select></div>
+      <div><label class="l">Motivo de la visita</label><select id="n_motivo" class="inp">${cfg.motivos.map(m => `<option>${esc(m)}</option>`).join('')}</select></div>
+      ${inp('fecha','Fecha *','type="date" value="' + hoyMx() + '"')}${inp('hora','Hora *','type="time" value="09:00"')}
+      ${inp('cliente','Nombre del cliente *')}${inp('razon','Razón social')}${inp('lugar','Lugar de atención *')}${inp('recibe','Quien recibe al técnico *')}
+      ${inp('contacto','Teléfono de contacto *','type="tel"')}${inp('ciudad','Ciudad *')}${inp('edo','Estado *')}
+      <div><label class="l">¿Instalación de cámara?</label><select id="n_camara" class="inp"><option>No</option><option>Sí</option></select></div>
+      ${inp('acc','Accesorios')}
+    </div>
+    <div class="flex flex-wrap gap-2 mt-4"><button class="btn" data-a="creaServ">Crear y enviar al técnico</button></div>
+    <hr class="my-5"><h3 class="font-semibold">Carga masiva desde Excel</h3>
+    <p class="text-sm text-slate-500 mb-2">Usa la plantilla Plantilla_servicios_ATT.xlsx (hoja "Servicios").</p>
+    <input id="n_xls" type="file" accept=".xlsx,.xls" class="text-sm"> <button class="btn btn2 btns" data-a="importa">Importar</button></div>`;
+}
+async function creaServ(btn){
+  const v = id => $('#n_' + id).value.trim(), req = { folio:'folio', tec:'técnico', fecha:'fecha', hora:'hora', cliente:'cliente', lugar:'lugar', recibe:'quien recibe', contacto:'contacto', ciudad:'ciudad', edo:'estado' };
+  for (const k in req) if (!v(k)) return toast('Falta: ' + req[k], 1);
+  btn.disabled = true;
+  try {
+    await api('/servicios', { method:'POST', body:{ folioAcuerdo:v('folio'), tecnicoAsignado:v('tec'), motivo:v('motivo'), fecha:v('fecha').split('-').reverse().join('/'), hora:v('hora'), cliente:v('cliente'),
+      razonSocial:v('razon'), lugarAtencion:v('lugar'), recibe:v('recibe'), contacto:v('contacto'), ciudad:v('ciudad'), estado:v('edo'), camara:v('camara'), accesorios:v('acc') } });
+    toast('Servicio creado'); await cargaServ(); irTab('servicios');
+  } catch(e){ toast(e.message, 1); btn.disabled = false; }
+}
+async function importa(btn){
+  const f = $('#n_xls').files[0]; if (!f) return toast('Elige el archivo Excel', 1);
+  const fd = new FormData(); fd.append('archivo', f); btn.disabled = true;
+  try { const d = await api('/servicios/importar', { method:'POST', body:fd });
+    toast(`Cargados: ${d.cargados} · repetidos: ${d.repetidos}` + (d.filasIncompletas.length ? ' · filas incompletas: ' + d.filasIncompletas.join(', ') : ''), d.filasIncompletas.length > 0);
+    await cargaServ();
+  } catch(e){ toast(e.message, 1); } btn.disabled = false;
+}
+
+// ---------- Captura de ODS (técnico) ----------
+let sigs = {};
+function pintaCap(){
+  const disp = S.servicios.filter(s => s.estatus !== 'Completado');
+  if (capFolio && !disp.some(s => s.folio === capFolio)) capFolio = '';
+  const foto = (n, l, extra = '') => `<div><label class="l">${l}</label><input type="file" name="${n}" accept="image/*" ${extra} class="text-sm w-full"></div>`;
+  $('#pane').innerHTML = `<div class="card"><h2 class="font-bold text-lg">Capturar ODS</h2>
+    <label class="l">Servicio</label>
+    <select id="cf" class="inp"><option value="">Selecciona un folio...</option>${disp.map(s => `<option value="${esc(s.folio)}" ${s.folio === capFolio ? 'selected' : ''}>${esc(s.folio)} · ${esc(s.cliente)} · ${esc(s.motivo)}</option>`).join('')}</select>
+    <div id="cinfo" class="text-sm text-slate-600 mt-2"></div>
+    <form id="fcap" class="hidden">
+      <h3 class="font-semibold mt-5">Equipo instalado</h3>
+      <div class="grid sm:grid-cols-2 gap-x-4">
+        <div><label class="l">Serie GO9 *</label><input name="serialGo9" class="inp" autocapitalize="characters"></div>
+        <div><label class="l">IMEI de cámara</label><input name="imeiCamara" class="inp" inputmode="numeric"></div>
+        <div><label class="l">Número de SIM</label><input name="numeroSim" class="inp"></div>
+        <div><label class="l">Arnés</label><input name="arnes" class="inp"></div>
+        <div><label class="l">Marca del vehículo</label><input name="marcaVehiculo" class="inp"></div>
+        <div><label class="l">Modelo</label><input name="modeloVehiculo" class="inp"></div>
+        <div><label class="l">Placas</label><input name="placasVehiculo" class="inp" autocapitalize="characters"></div>
+        <div><label class="l">VIN *</label><input name="vinVehiculo" class="inp" autocapitalize="characters" maxlength="17"></div>
+      </div>
+      <label class="l">Comentario del técnico</label><textarea name="comentarioTecnico" class="inp" rows="2"></textarea>
+      <h3 class="font-semibold mt-5">Partes eléctricas funcionando</h3>
+      <div class="wrap"><table><thead><tr><th>Descripción</th><th class="text-center">Sí</th><th class="text-center">No</th><th class="text-center">N/A</th></tr></thead><tbody>
+        ${cfg.elec.map((it, i) => `<tr><td>${esc(it)}</td>${['Sí','No','N/A'].map(v => `<td class="text-center"><input type="radio" name="elec_${i}" value="${v}" style="width:20px;height:20px"></td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>
+      <label class="l">Observaciones de partes eléctricas</label><textarea name="obsElec" class="inp" rows="2"></textarea>
+      <h3 class="font-semibold mt-5">Fotos</h3>
+      <div class="grid sm:grid-cols-2 gap-x-4">${foto('foto_adherible','Adherible del GO9')}${foto('foto_imei_camara','IMEI y SIM de cámara')}${foto('foto_vin','VIN')}${foto('foto_tablero','Instalación (puedes elegir varias)','multiple')}</div>
+      <h3 class="font-semibold mt-5">Firmas</h3>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div><label class="l">Nombre de quien firma por el cliente</label><input name="nombreCliente" class="inp mb-2"><canvas class="sig" id="sigC"></canvas><button type="button" class="btn btn2 btns mt-1" data-a="limpiaSig" data-s="sigC">Borrar firma cliente</button></div>
+        <div><label class="l">Firma del técnico</label><div style="height:42px"></div><canvas class="sig" id="sigT"></canvas><button type="button" class="btn btn2 btns mt-1" data-a="limpiaSig" data-s="sigT">Borrar firma técnico</button></div>
+      </div>
+      <button class="btn w-full mt-5" id="bGen" style="padding:13px">Generar ODS en PDF</button>
+    </form></div>`;
+  $('#cf').addEventListener('change', e => { capFolio = e.target.value; if (capFolio) abrirSi(capFolio); muestraForm(); });
+  muestraForm();
+}
+async function abrirSi(folio){
+  const s = S.servicios.find(x => x.folio === folio);
+  if (me.rol === 'tec' && s && s.estatus === 'Enviado'){ try { await api('/servicios/' + encodeURIComponent(folio) + '/abrir', { method:'POST' }); s.estatus = 'En curso'; s.abiertoEn = Date.now(); } catch(e){ toast(e.message, 1); } }
+}
+function muestraForm(){
+  const s = S.servicios.find(x => x.folio === capFolio), f = $('#fcap');
+  if (!s){ f.classList.add('hidden'); $('#cinfo').textContent = ''; return; }
+  $('#cinfo').innerHTML = `<b>${esc(s.cliente)}</b> · ${esc(s.lugar)}, ${esc(s.ciudad)} · ${esc(s.fecha)} ${esc(s.hora)} · Recibe: ${esc(s.recibe)} (${esc(s.contacto)})`;
+  f.classList.remove('hidden'); iniFirma('sigC'); iniFirma('sigT');
+}
+function iniFirma(id){
+  const c = $('#' + id), r = c.getBoundingClientRect(), k = window.devicePixelRatio || 1; c.width = r.width * k; c.height = r.height * k;
+  const g = c.getContext('2d'); g.scale(k, k); g.lineWidth = 2.2; g.lineCap = 'round'; g.strokeStyle = '#0f172a'; sigs[id] = false;
+  let d = false; const pos = e => { const b = c.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  c.onpointerdown = e => { d = true; c.setPointerCapture(e.pointerId); g.beginPath(); g.moveTo(...pos(e)); };
+  c.onpointermove = e => { if (!d) return; g.lineTo(...pos(e)); g.stroke(); sigs[id] = true; };
+  c.onpointerup = c.onpointercancel = () => { d = false; };
+}
+function limpiaSig(id){ const c = $('#' + id); c.getContext('2d').clearRect(0, 0, c.width, c.height); sigs[id] = false; }
+async function reducir(file){
+  try {
+    const bmp = await createImageBitmap(file), k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise(r => c.toBlob(b => r(b || file), 'image/jpeg', 0.82));
+  } catch(e){ return file; }
+}
+async function generaOds(e){
+  e.preventDefault(); const f = $('#fcap'), btn = $('#bGen');
+  if (!f.serialGo9.value.trim()) return toast('Falta la serie del GO9', 1);
+  if (!f.vinVehiculo.value.trim()) return toast('Falta el VIN', 1);
+  if (!sigs.sigC || !sigs.sigT) return toast('Faltan las firmas del cliente y del técnico', 1);
+  btn.disabled = true; btn.textContent = 'Generando PDF...';
+  try {
+    const fd = new FormData(); fd.append('folioAcuerdo', capFolio);
+    for (const el of f.elements){
+      if (!el.name) continue;
+      if (el.type === 'file'){ for (const file of el.files) fd.append(el.name, await reducir(file), file.name.replace(/\.\w+$/, '') + '.jpg'); }
+      else if (el.type === 'radio'){ if (el.checked) fd.append(el.name, el.value); }
+      else fd.append(el.name, el.value);
+    }
+    fd.append('firmaCliente', $('#sigC').toDataURL('image/png')); fd.append('firmaTecnico', $('#sigT').toDataURL('image/png'));
+    const d = await api('/generar-ods', { method:'POST', body:fd });
+    await cargaServ(); capFolio = '';
+    modal(`<h3 class="font-bold text-lg">ODS generada</h3><p class="text-sm text-slate-600 mt-1">El servicio quedó como completado.</p>
+      <div class="flex gap-2 mt-4"><a class="btn" href="${esc(d.descargaUrl)}" target="_blank">Abrir / descargar PDF</a><button class="btn btn2" data-a="cerrar">Cerrar</button></div>`);
+    irTab('servicios');
+  } catch(err){ toast(err.message, 1); btn.disabled = false; btn.textContent = 'Generar ODS en PDF'; }
+}
+document.addEventListener('submit', e => { if (e.target.id === 'fcap') generaOds(e); });
+
+// ---------- Solicitudes de validación ----------
+function pedirVal(folio){
+  modal(`<h3 class="font-bold text-lg">Solicitar validación</h3><p class="text-sm text-slate-500">Folio ${esc(folio)}</p>
+    <label class="l">Nota para soporte (opcional)</label><textarea id="vn" class="inp" rows="3"></textarea>
+    <div class="flex gap-2 mt-4"><button class="btn" data-a="enviaVal" data-f="${esc(folio)}">Enviar</button><button class="btn btn2" data-a="cerrar">Cancelar</button></div>`);
+}
+function pintaSolic(){
+  if (tab !== 'solic') return;
+  const col = m => S.vals.filter(v => m.includes(v.estado));
+  const fila = v => `<tr><td class="font-semibold">${esc(v.folio)}</td><td>${esc(v.tecnico)}</td><td>${esc(v.cliente)}</td><td>${bd(v.estado)}</td>
+    <td class="text-xs text-slate-600">${esc(v.nota)}${v.comentario ? '<br><b>Soporte:</b> ' + esc(v.comentario) : ''}${v.soporteNombre ? '<br>Atiende: ' + esc(v.soporteNombre) : ''}</td>
+    <td class="whitespace-nowrap text-xs">${fmtTs(v.creadoEn)}</td>
+    <td class="whitespace-nowrap text-right">${v.urlDoc ? `<a class="btn btn2 btns" href="${esc(v.urlDoc)}" target="_blank">PDF</a> ` : ''}
+      ${['soporte','coord'].includes(me.rol) && v.estado === 'Pendiente' ? `<button class="btn btns" data-a="atender" data-i="${v.id}">Tomar</button> ` : ''}
+      ${['soporte','coord'].includes(me.rol) && v.estado === 'En atención' && (me.rol === 'coord' || v.soporte === me.usuario) ? `<button class="btn btns" data-a="resolver" data-i="${v.id}">Resolver</button> ` : ''}
+      ${me.rol === 'coord' ? `<button class="btn btnr btns" data-a="borraVal" data-i="${v.id}"><i class="fa fa-trash"></i></button>` : ''}</td></tr>`;
+  const tabla = (tit, l) => `<div class="card mb-4"><h3 class="font-semibold mb-2">${tit} (${l.length})</h3><div class="wrap">${l.length ? `<table><thead><tr><th>Folio</th><th>Técnico</th><th>Cliente</th><th>Estado</th><th>Detalle</th><th>Solicitada</th><th></th></tr></thead><tbody>${l.map(fila).join('')}</tbody></table>` : '<p class="text-sm text-slate-500">Sin solicitudes.</p>'}</div></div>`;
+  $('#pane').innerHTML = tabla('Abiertas', col(['Pendiente','En atención'])) + tabla('Resueltas', col(['Validada','Con observaciones']));
+}
+function resolver(id){
+  modal(`<h3 class="font-bold text-lg">Resolver solicitud</h3>
+    <label class="l">Resultado</label><select id="rr" class="inp"><option>Validada</option><option>Con observaciones</option></select>
+    <label class="l">Comentario</label><textarea id="rc" class="inp" rows="3"></textarea>
+    <div class="flex gap-2 mt-4"><button class="btn" data-a="guardaRes" data-i="${id}">Guardar</button><button class="btn btn2" data-a="cerrar">Cancelar</button></div>`);
+}
+
+// ---------- Usuarios ----------
+function pintaUsers(){
+  $('#pane').innerHTML = `<div class="card mb-4"><h2 class="font-bold text-lg">Crear usuario</h2>
+    <div class="grid sm:grid-cols-2 gap-x-4">
+      <div><label class="l">Nombre completo</label><input id="u_nombre" class="inp"></div>
+      <div><label class="l">Usuario (sin espacios)</label><input id="u_user" class="inp" autocapitalize="none"></div>
+      <div><label class="l">Rol</label><select id="u_rol" class="inp"><option value="tec">Técnico</option><option value="coord">Coordinador</option><option value="soporte">Soporte</option></select></div>
+      <div><label class="l">Contraseña (mínimo 6)</label><input id="u_pass" class="inp"></div>
+      <div class="u_turno hidden"><label class="l">Turno: inicio</label><input id="u_ti" type="time" class="inp" value="07:00"></div>
+      <div class="u_turno hidden"><label class="l">Turno: fin</label><input id="u_tf" type="time" class="inp" value="15:00"></div>
+    </div><button class="btn mt-4" data-a="creaUser">Crear usuario</button></div>
+    <div class="card"><h2 class="font-bold text-lg mb-2">Usuarios</h2><div class="wrap"><table><thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Turno</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${S.usuarios.map(u => `<tr><td>${esc(u.nombre)}</td><td>${esc(u.usuario)}</td><td>${ROL[u.rol]}</td><td>${u.turno ? esc(u.turno.inicio + '–' + u.turno.fin) : '—'}</td>
+      <td>${u.activo === false ? badge('Inactivo', ['#e2e8f0','#334155']) : badge('Activo', COL.Completado)}</td>
+      <td class="text-right whitespace-nowrap"><button class="btn btn2 btns" data-a="editaUser" data-u="${esc(u.usuario)}">Editar</button></td></tr>`).join('')}</tbody></table></div></div>`;
+  const tg = () => document.querySelectorAll('.u_turno').forEach(e => e.classList.toggle('hidden', $('#u_rol').value !== 'soporte'));
+  $('#u_rol').addEventListener('change', tg); tg();
+}
+async function creaUser(btn){
+  const v = id => $('#' + id).value.trim(), rol = $('#u_rol').value;
+  btn.disabled = true;
+  try { await api('/usuarios', { method:'POST', body:{ nombre:v('u_nombre'), usuario:v('u_user'), rol, password:$('#u_pass').value, turnoInicio:v('u_ti'), turnoFin:v('u_tf') } });
+    toast('Usuario creado'); await cargaUsuarios(); pintaUsers();
+  } catch(e){ toast(e.message, 1); btn.disabled = false; }
+}
+function editaUser(un){
+  const u = S.usuarios.find(x => x.usuario === un); if (!u) return;
+  modal(`<h3 class="font-bold text-lg">Editar ${esc(u.usuario)}</h3>
+    <label class="l">Nombre</label><input id="e_nombre" class="inp" value="${esc(u.nombre)}">
+    <label class="l">Rol</label><select id="e_rol" class="inp">${Object.entries(ROL).map(([k,n]) => `<option value="${k}" ${k === u.rol ? 'selected' : ''}>${n}</option>`).join('')}</select>
+    <div class="grid grid-cols-2 gap-3"><div><label class="l">Turno inicio (soporte)</label><input id="e_ti" type="time" class="inp" value="${esc(u.turno ? u.turno.inicio.padStart(5,'0') : '07:00')}"></div>
+      <div><label class="l">Turno fin</label><input id="e_tf" type="time" class="inp" value="${esc(u.turno ? u.turno.fin.padStart(5,'0') : '15:00')}"></div></div>
+    <label class="l">Nueva contraseña (déjala vacía para no cambiarla)</label><input id="e_pass" class="inp">
+    <label class="l"><input type="checkbox" id="e_act" ${u.activo === false ? '' : 'checked'}> Usuario activo</label>
+    <div class="flex flex-wrap gap-2 mt-4"><button class="btn" data-a="guardaUser" data-u="${esc(u.usuario)}">Guardar</button>
+      <button class="btn btnr" data-a="borraUser" data-u="${esc(u.usuario)}">Eliminar</button><button class="btn btn2" data-a="cerrar">Cancelar</button></div>`);
+}
+
+// ---------- KPI ----------
+async function pintaKpi(){
+  const P = [['hoy','Hoy'],['ayer','Ayer'],['semana','Esta semana'],['mes','Este mes'],['todas','Todas'],['personalizado','Personalizado']];
+  $('#pane').innerHTML = `<div class="flex flex-wrap gap-2 mb-3 items-center">${P.map(([k,n]) => `<span class="chip ${k === kpiP ? 'on' : ''}" data-a="kpiP" data-p="${k}">${n}</span>`).join('')}
+    ${kpiP === 'personalizado' ? `<input type="date" id="kd" class="inp" style="width:auto" value="${kpiD}"><input type="date" id="kh" class="inp" style="width:auto" value="${kpiH}"><button class="btn btns" data-a="kpiAplica">Aplicar</button>` : ''}</div><div id="kbody" class="text-slate-500">Cargando...</div>`;
+  try {
+    const q = `?periodo=${kpiP}&desde=${kpiD}&hasta=${kpiH}`, k = await api('/kpi' + q), t = k.total;
+    const card = (l, v, s = '') => `<div class="card"><div class="text-xs text-slate-500">${l}</div><div class="text-2xl font-bold">${v}</div><div class="text-xs text-slate-500">${s}</div></div>`;
+    const tb = (tit, l) => `<div class="card mb-4"><h3 class="font-semibold mb-2">${tit}</h3><div class="wrap"><table><thead><tr><th>${tit.includes('técnico') ? 'Técnico' : 'Motivo'}</th><th>Servicios</th><th>Completados</th><th>En curso</th><th>Sin abrir</th><th>Promedio</th><th>Mediana</th></tr></thead><tbody>
+      ${l.map(x => `<tr><td>${esc(x.nombre)}</td><td>${x.servicios}</td><td>${x.completados}</td><td>${x.enCurso}</td><td>${x.sinAbrir}</td><td>${fmtMin(x.prom)}</td><td>${fmtMin(x.mediana)}</td></tr>`).join('') || '<tr><td colspan="7" class="text-slate-500">Sin datos en este periodo.</td></tr>'}</tbody></table></div></div>`;
+    $('#kbody').outerHTML = `<div id="kbody"><div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">${card('Servicios', t.servicios)}${card('Completados', t.completados, 'firmados por el cliente')}${card('En curso', t.enCurso, '· ' + t.sinAbrir + ' sin abrir')}${card('Tiempo de servicio', fmtMin(t.prom), 'promedio · mediana ' + fmtMin(t.mediana))}</div>${tb('Por técnico', k.porTecnico)}${tb('Por motivo', k.porMotivo)}</div>`;
+  } catch(e){ $('#kbody').textContent = e.message; }
+}
+
+// ---------- Salud de equipos ----------
+async function pintaSalud(forzar){
+  $('#pane').innerHTML = '<p class="text-slate-500">Consultando Geotab...</p>';
+  try { S.salud = await api('/salud' + (forzar ? '?forzar=1' : '')); } catch(e){ $('#pane').innerHTML = `<div class="card text-red-700">${esc(e.message)}</div>`; return; }
+  if (!S.salud.configurado){ $('#pane').innerHTML = `<div class="card"><h2 class="font-bold text-lg">Salud de equipos</h2><p class="text-sm mt-2">Geotab todavía no está conectado. Agrega en Render las variables <b>GEOTAB_DATABASE</b>, <b>GEOTAB_USER</b> y <b>GEOTAB_PASSWORD</b> y vuelve a entrar.</p></div>`; return; }
+  pintaSaludTabla(true);
+}
+function pintaSaludTabla(full){
+  const U = S.salud.unidades, n = U.length, cnt = c => U.filter(u => u.categoria === c).length;
+  const ok = cnt('OK'), crit = U.filter(u => u.categoria.startsWith('Crítico')).length;
+  const q = saludQ.toLowerCase(), l = U.filter(u => (!saludCat || u.categoria === saludCat) && (!q || [u.nombre, u.serie, u.vin, u.placas].join(' ').toLowerCase().includes(q)));
+  if (full) $('#pane').innerHTML = `<div class="grid grid-cols-3 gap-3 mb-3">
+      <div class="card"><div class="text-xs text-slate-500">Unidades totales</div><div class="text-2xl font-bold">${n}</div></div>
+      <div class="card"><div class="text-xs text-slate-500">GPS al día</div><div class="text-2xl font-bold">${n ? Math.round(ok * 100 / n) : 0}%</div></div>
+      <div class="card"><div class="text-xs text-slate-500">Críticas GPS</div><div class="text-2xl font-bold">${crit}</div></div></div>
+    <div class="card"><div class="flex flex-wrap gap-2 items-center mb-3">
+      <span class="chip ${saludCat === '' ? 'on' : ''}" data-a="saludCat" data-c="">Todas (${n})</span>
+      ${cfg.categorias.map(([c, d]) => `<span class="chip ${saludCat === c ? 'on' : ''}" data-a="saludCat" data-c="${c}" title="${esc(d)}">${c} (${cnt(c)})</span>`).join('')}
+      <input id="sq" class="inp" style="max-width:240px;margin-left:auto" placeholder="Buscar unidad, serie, VIN..." value="${esc(saludQ)}">
+      <button class="btn btn2 btns" data-a="saludXls"><i class="fa fa-file-excel"></i></button><button class="btn btn2 btns" data-a="saludRef"><i class="fa fa-rotate"></i></button></div>
+      <p class="text-xs text-slate-500 mb-2">Actualizado: ${fmtTs(S.salud.actualizado)} · se refresca cada 60 minutos. Solo GPS/GO9: la salud de cámaras no está disponible en Geotab.</p>
+      <div id="stbl" class="wrap"></div></div>`;
+  document.querySelectorAll('[data-a="saludCat"]').forEach(e => e.classList.toggle('on', e.dataset.c === saludCat));
+  const sq = $('#sq'); if (sq && !sq._b){ sq._b = 1; sq.addEventListener('input', e => { saludQ = e.target.value; pintaSaludTabla(false); }); }
+  $('#stbl').innerHTML = `<table><thead><tr><th>Unidad</th><th>Serie GO9</th><th>VIN</th><th>Placas</th><th>Última comunicación</th><th>Días</th><th>Categoría</th></tr></thead><tbody>
+    ${l.slice(0, 1000).map(u => `<tr><td>${esc(u.nombre)}</td><td>${esc(u.serie)}</td><td>${esc(u.vin)}</td><td>${esc(u.placas)}</td><td>${fmtTs(u.ultima && Date.parse(u.ultima))}</td><td>${u.dias ?? '—'}</td><td>${bd(u.categoria)}</td></tr>`).join('') || '<tr><td colspan="7" class="text-slate-500">Sin resultados.</td></tr>'}</tbody></table>`;
+}
+
+// ---------- Acciones (delegación de eventos) ----------
+const A = {
+  tab: d => irTab(d.t), salir, miPass: () => miPass(false), cerrar, cerrarBg: (d, e) => { if (e.target.classList.contains('modalbg')) cerrar(); },
+  filtro: d => { filtro = d.f; pintaServ(); }, detalle: d => detalle(d.f), exportaServ,
+  capturar: async d => { capFolio = d.f; await abrirSi(d.f); irTab('capturar'); },
+  creaServ: (d, e, b) => creaServ(b), importa: (d, e, b) => importa(b),
+  borraServ: async d => { if (!confirm('¿Eliminar el servicio ' + d.f + '?')) return; try { await api('/servicios/' + encodeURIComponent(d.f), { method:'DELETE' }); await cargaServ(); pintaTablaServ(); toast('Eliminado'); } catch(e){ toast(e.message, 1); } },
+  limpiaSig: d => limpiaSig(d.s),
+  guardaPass: async () => { try { await api('/yo/password', { method:'PUT', body:{ actual:$('#pa').value, nueva:$('#pn').value } }); toast('Contraseña actualizada'); if (me) me.debeCambiar = false; cerrar(); } catch(e){ toast(e.message, 1); } },
+  pedirVal: d => pedirVal(d.f),
+  enviaVal: async d => { try { await api('/validaciones', { method:'POST', body:{ folio:d.f, nota:$('#vn').value } }); cerrar(); toast('Solicitud enviada a soporte'); } catch(e){ toast(e.message, 1); } },
+  atender: async d => { try { await api('/validaciones/' + d.i + '/atender', { method:'PUT' }); } catch(e){ toast(e.message, 1); } await cargaVals(); cargaTurno(); pintaSolic(); },
+  resolver: d => resolver(d.i),
+  guardaRes: async d => { try { await api('/validaciones/' + d.i + '/resolver', { method:'PUT', body:{ resultado:$('#rr').value, comentario:$('#rc').value } }); cerrar(); toast('Solicitud resuelta'); } catch(e){ toast(e.message, 1); } await cargaVals(); cargaTurno(); pintaSolic(); },
+  borraVal: async d => { if (!confirm('¿Eliminar esta solicitud?')) return; try { await api('/validaciones/' + d.i, { method:'DELETE' }); } catch(e){ toast(e.message, 1); } await cargaVals(); pintaSolic(); },
+  creaUser: (d, e, b) => creaUser(b), editaUser: d => editaUser(d.u),
+  guardaUser: async d => {
+    const rol = $('#e_rol').value, body = { nombre:$('#e_nombre').value, rol, activo:$('#e_act').checked };
+    if ($('#e_pass').value) body.password = $('#e_pass').value;
+    if (rol === 'soporte'){ body.turnoInicio = $('#e_ti').value; body.turnoFin = $('#e_tf').value; }
+    try { await api('/usuarios/' + encodeURIComponent(d.u), { method:'PUT', body }); cerrar(); toast('Usuario actualizado'); await cargaUsuarios(); pintaUsers(); cargaTurno(); } catch(e){ toast(e.message, 1); }
+  },
+  borraUser: async d => { if (!confirm('¿Eliminar al usuario ' + d.u + '? Mejor desactívalo si quieres conservar su historial.')) return;
+    try { await api('/usuarios/' + encodeURIComponent(d.u), { method:'DELETE' }); cerrar(); toast('Usuario eliminado'); await cargaUsuarios(); pintaUsers(); } catch(e){ toast(e.message, 1); } },
+  kpiP: d => { kpiP = d.p; pintaKpi(); }, kpiAplica: () => { kpiD = $('#kd').value; kpiH = $('#kh').value; pintaKpi(); },
+  saludCat: d => { saludCat = d.c; pintaSaludTabla(false); }, saludRef: () => pintaSalud(true),
+  saludXls: () => { const q = saludQ.toLowerCase(); bajaXlsx((S.salud.unidades || []).filter(u => (!saludCat || u.categoria === saludCat) && (!q || [u.nombre, u.serie, u.vin, u.placas].join(' ').toLowerCase().includes(q)))
+    .map(u => ({ Unidad:u.nombre, 'Serie GO9':u.serie, VIN:u.vin, Placas:u.placas, 'Última comunicación':u.ultima || '', Días:u.dias ?? '', Categoría:u.categoria })), 'Salud', 'salud_equipos.xlsx'); }
+};
+document.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b && A[b.dataset.a]) A[b.dataset.a](b.dataset, e, b); });
+init();
+</script>
+</body>
+</html>
