@@ -4,11 +4,16 @@ const express = require('express'), cors = require('cors'), multer = require('mu
 const L = require('./lib'), { leerFlota } = require('./geotab');
 
 const PORT = process.env.PORT || 3000;
-const APP_NAME = process.env.APP_NAME || 'ADF Control';
+const APP_NAME = process.env.APP_NAME || 'Órdenes de Servicio';
+const EMPRESA = process.env.EMPRESA || APP_NAME;
+const BRAND = /^#[0-9a-fA-F]{6}$/.test(process.env.BRAND_COLOR || '') ? process.env.BRAND_COLOR : '#0f766e';
+const TAGLINE = process.env.APP_TAGLINE || 'Órdenes de servicio y seguimiento de instalaciones';
+const NOTA_PDF = process.env.PDF_NOTE || '';
+const USE_ELEC = process.env.ELEC_TABLE !== '0';
 const DIR = process.env.DATA_DIR || __dirname;
 const ODS = path.join(DIR, 'ods'), FILE = path.join(DIR, 'db.json');
-const LOGO = path.join(__dirname, 'public', 'logo-att.png');
-const P = (process.env.DB_PREFIX || 'adf_').toLowerCase().replace(/[^a-z0-9_]/g, '');   // prefijo de tablas: permite compartir la misma base con otra app
+const LOGO = path.join(__dirname, 'public', 'logo.png');
+const P = (process.env.DB_PREFIX || 'adf_').toLowerCase().replace(/[^a-z0-9_]/g, '');
 fs.mkdirSync(ODS, { recursive: true });
 
 // ---------- Almacenamiento: base de datos externa (DATABASE_URL) o archivo local ----------
@@ -19,7 +24,7 @@ if (USE_PG) {
   ['sslmode', 'channel_binding'].forEach(k => u.searchParams.delete(k));
   pool = new (require('pg').Pool)({ connectionString: u.toString(), ssl: { rejectUnauthorized: false }, max: 4 });
 }
-let db = { usuarios: [], servicios: [], validaciones: [] }, pend = false, guardando = false;
+let db = { usuarios: [], servicios: [], validaciones: [], config: {} }, pend = false, guardando = false;
 async function volcar() {
   guardando = true;
   while (pend) {
@@ -37,15 +42,37 @@ async function cargar() {
   const r = await pool.query(`SELECT datos FROM ${P}estado WHERE id = 1`);
   if (r.rows[0]) db = r.rows[0].datos;
 }
+// Archivos (PDF, fotos pendientes de firma, firma del técnico, logo): en la base de datos o en la carpeta local
+async function blobPut(n, buf) {
+  if (USE_PG) await pool.query(`INSERT INTO ${P}pdfs (nombre, datos) VALUES ($1, $2) ON CONFLICT (nombre) DO UPDATE SET datos = EXCLUDED.datos`, [n, buf]);
+  else fs.writeFileSync(path.join(ODS, n), buf);
+}
+async function blobGet(n) {
+  if (USE_PG) { const r = await pool.query(`SELECT datos FROM ${P}pdfs WHERE nombre = $1`, [n]); return r.rows[0] ? r.rows[0].datos : null; }
+  const f = path.join(ODS, n); return fs.existsSync(f) ? fs.readFileSync(f) : null;
+}
+async function blobDel(n) {
+  if (!n) return;
+  try { if (USE_PG) await pool.query(`DELETE FROM ${P}pdfs WHERE nombre = $1`, [n]); else fs.unlink(path.join(ODS, n), () => {}); } catch (e) {}
+}
 const t = v => String(v ?? '').trim(), nm = v => t(v).toUpperCase();
 const limpia = v => t(v).replace(/^["']|["']$/g, '');
 
+// ---------- Configuración (variables de Render + cambios hechos desde el panel) ----------
+function conf() {
+  const c = db.config || {};
+  return {
+    nombre: t(c.nombre) || APP_NAME, empresa: t(c.empresa) || EMPRESA,
+    color: /^#[0-9a-fA-F]{6}$/.test(c.color || '') ? c.color : BRAND, lema: c.lema !== undefined ? t(c.lema) : TAGLINE,
+    nota: c.nota !== undefined ? t(c.nota) : NOTA_PDF,
+    formatos: L.normFormatos(c.formatos, { campos: c.campos, elec: c.elec !== undefined ? !!c.elec : USE_ELEC }), logo: !!c.logo };
+}
+
 // ---------- Cuenta inicial del coordinador ----------
-// ADMIN_PASS (si existe) manda en cada arranque: sirve para recuperar el acceso. Sin ella la cuenta nace con admin123 y obliga a cambiarla.
 const ADMIN_USER = limpia(process.env.ADMIN_USER || 'cesar.admin').toLowerCase(), ENV_PASS = limpia(process.env.ADMIN_PASS);
 let SECRET = process.env.JWT_SECRET || '';
 function sembrar() {
-  db.usuarios = db.usuarios || []; db.servicios = db.servicios || []; db.validaciones = db.validaciones || [];
+  db.usuarios = db.usuarios || []; db.servicios = db.servicios || []; db.validaciones = db.validaciones || []; db.config = db.config || {};
   if (!SECRET) { db.secret = db.secret || crypto.randomBytes(32).toString('hex'); SECRET = db.secret; }
   if (ENV_PASS) {
     const hash = bcrypt.hashSync(ENV_PASS, 10), c = db.usuarios.find(u => u.usuario === ADMIN_USER);
@@ -65,34 +92,65 @@ const auth = (req, res, next) => {
   try {
     const p = jwt.verify((req.headers.authorization || '').slice(7), SECRET), u = db.usuarios.find(x => x.usuario === p.usuario);
     if (!u || u.activo === false) return bad(res, 401, 'Sesión no válida');
-    req.u = { usuario: u.usuario, nombre: u.nombre, rol: u.rol }; next();
+    req.u = { usuario: u.usuario, nombre: u.nombre, rol: u.rol, cliente: u.cliente || '', telefono: u.telefono || '' }; next();
   } catch (e) { bad(res, 401, 'Sesión no válida'); }
 };
 const rol = (...r) => (req, res, next) => r.includes(req.u.rol) ? next() : bad(res, 403, 'No tienes permiso para hacer esto');
 const up = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
-const ROLES = ['coord', 'tec', 'soporte'];
+const ROLES = ['coord', 'tec', 'soporte', 'cliente'];
 const publico = ({ hash, ...u }) => u;
 const hhmm = v => /^\d{1,2}:\d{2}$/.test(t(v)) ? t(v) : '';
+// Servicios que puede ver cada usuario; y versión sin datos internos (tokens, archivos)
+const visibles = u => u.rol === 'tec' ? db.servicios.filter(s => nm(s.tecnico) === nm(u.nombre))
+  : u.rol === 'cliente' ? db.servicios.filter(s => u.cliente && nm(s.cliente) === nm(u.cliente)) : db.servicios;
+const pub = ({ firmaToken, firmaExp, fotosMeta, firmaTecBlob, firmando, uid, firmaInfo, ...r }) => ({ ...r, firmadoRemoto: !!firmaInfo });
+const dataImg = u => u && String(u).startsWith('data:image') ? Buffer.from(String(u).split(',')[1], 'base64') : null;
 
 const app = express();
 app.set('trust proxy', 1);
-app.use((req, res, next) => { res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer' }); next(); });
+app.use((req, res, next) => { res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'no-referrer' }); next(); });
 app.use(cors()); app.use(express.json({ limit: '2mb' }));
 
 app.get('/ods/:nombre', async (req, res) => {
   const n = req.params.nombre;
   if (!/^[\w.-]+\.pdf$/.test(n)) return res.status(404).end();
-  const f = path.join(ODS, n);
-  if (fs.existsSync(f)) return res.type('application/pdf').sendFile(f);
-  if (USE_PG) { try { const r = await pool.query(`SELECT datos FROM ${P}pdfs WHERE nombre = $1`, [n]); if (r.rows[0]) return res.type('application/pdf').send(r.rows[0].datos); } catch (e) {} }
+  try { const b = await blobGet(n); if (b) return res.type('application/pdf').send(b); } catch (e) {}
   res.status(404).type('text').send('Documento no encontrado');
 });
+// Logo: el que sube el coordinador desde el panel, o public/logo.png
+app.get('/logo', async (req, res) => {
+  let b = null; try { b = await blobGet('logo_marca'); } catch (e) {}
+  if (!b && fs.existsSync(LOGO)) b = fs.readFileSync(LOGO);
+  if (!b) return res.status(404).end();
+  res.set('Cache-Control', 'no-cache').type(b[0] === 0xFF ? 'image/jpeg' : 'image/png').send(b);
+});
+app.get('/firmar/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'firmar.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/version', (req, res) => res.json({ version: '4.0', app: APP_NAME }));
+app.get('/api/version', (req, res) => res.json({ version: '5.0', app: conf().nombre }));
 const geotabCfg = () => process.env.GEOTAB_DATABASE && process.env.GEOTAB_USER && process.env.GEOTAB_PASSWORD
   ? { server: process.env.GEOTAB_SERVER, database: limpia(process.env.GEOTAB_DATABASE), user: limpia(process.env.GEOTAB_USER), password: limpia(process.env.GEOTAB_PASSWORD) } : null;
-app.get('/api/config', (req, res) => ok(res, { nombre: APP_NAME, motivos: L.MOTIVOS, elec: L.ELEC, categorias: L.CATEGORIAS, geotab: !!geotabCfg() }));
+app.get('/api/config', (req, res) => { const c = conf(); ok(res, { ...c, motivos: L.MOTIVOS, elecItems: L.ELEC, categorias: L.CATEGORIAS, geotab: !!geotabCfg() }); });
+app.put('/api/config', auth, rol('coord'), (req, res) => {
+  const b = req.body, c = db.config = db.config || {};
+  if (b.nombre !== undefined) c.nombre = t(b.nombre).slice(0, 60);
+  if (b.empresa !== undefined) c.empresa = t(b.empresa).slice(0, 80);
+  if (b.lema !== undefined) c.lema = t(b.lema).slice(0, 120);
+  if (b.nota !== undefined) c.nota = t(b.nota).slice(0, 600);
+  if (b.color !== undefined) { if (!/^#[0-9a-fA-F]{6}$/.test(t(b.color))) return bad(res, 400, 'Color no válido'); c.color = t(b.color); }
+  if (b.formatos !== undefined) c.formatos = L.normFormatos(b.formatos, {});
+  save(); ok(res, { config: conf() });
+});
+app.post('/api/config/logo', auth, rol('coord'), up.single('logo'), async (req, res) => {
+  const f = req.file;
+  if (!f) return bad(res, 400, 'Elige una imagen');
+  if (f.size > 1024 * 1024) return bad(res, 400, 'El logo debe pesar menos de 1 MB');
+  const png = f.buffer[0] === 0x89 && f.buffer[1] === 0x50, jpg = f.buffer[0] === 0xFF && f.buffer[1] === 0xD8;
+  if (!png && !jpg) return bad(res, 400, 'Usa una imagen PNG o JPG');
+  try { await blobPut('logo_marca', f.buffer); db.config = db.config || {}; db.config.logo = true; save(); ok(res); }
+  catch (e) { bad(res, 500, 'No se pudo guardar el logo'); }
+});
+app.delete('/api/config/logo', auth, rol('coord'), async (req, res) => { await blobDel('logo_marca'); db.config = db.config || {}; db.config.logo = false; save(); ok(res); });
 
 // ---------- Sesión ----------
 const fallos = {};   // 8 fallos por IP cada 15 minutos
@@ -117,14 +175,16 @@ app.put('/api/yo/password', auth, (req, res) => {
   u.hash = bcrypt.hashSync(nueva, 10); delete u.debeCambiar; save(); ok(res);
 });
 
-// ---------- Usuarios (coordinadores, técnicos y soporte) ----------
+// ---------- Usuarios (coordinadores, técnicos, soporte y clientes) ----------
 app.get('/api/usuarios', auth, rol('coord'), (req, res) => ok(res, { usuarios: db.usuarios.map(publico) }));
 app.post('/api/usuarios', auth, rol('coord'), (req, res) => {
   const usuario = t(req.body.usuario).toLowerCase().replace(/[^a-z0-9._-]/g, ''), nombre = t(req.body.nombre), pass = String(req.body.password || ''), r = t(req.body.rol);
   if (!usuario || !nombre || pass.length < 6 || !ROLES.includes(r)) return bad(res, 400, 'Falta usuario, nombre, rol o contraseña (mínimo 6 caracteres)');
   if (db.usuarios.some(u => u.usuario === usuario)) return bad(res, 409, 'Ese usuario ya existe');
   const n = { usuario, nombre, rol: r, activo: true, hash: bcrypt.hashSync(pass, 10) };
+  if (t(req.body.telefono)) n.telefono = t(req.body.telefono).slice(0, 30);
   if (r === 'soporte') { const i = hhmm(req.body.turnoInicio), f = hhmm(req.body.turnoFin); if (!i || !f) return bad(res, 400, 'Indica el horario de turno del soporte (inicio y fin)'); n.turno = { inicio: i, fin: f }; }
+  if (r === 'cliente') { if (!t(req.body.cliente)) return bad(res, 400, 'Escribe el nombre del cliente tal como aparece en sus órdenes'); n.cliente = t(req.body.cliente); }
   db.usuarios.push(n); save(); ok(res);
 });
 app.put('/api/usuarios/:usuario', auth, rol('coord'), (req, res) => {
@@ -144,8 +204,11 @@ app.put('/api/usuarios/:usuario', auth, rol('coord'), (req, res) => {
     u.rol = b.rol;
   }
   if (b.nombre !== undefined && t(b.nombre)) u.nombre = t(b.nombre);
+  if (b.telefono !== undefined) { if (t(b.telefono)) u.telefono = t(b.telefono).slice(0, 30); else delete u.telefono; }
+  if (b.cliente !== undefined && t(b.cliente)) u.cliente = t(b.cliente);
   if (b.turnoInicio !== undefined || b.turnoFin !== undefined) { const i = hhmm(b.turnoInicio), f = hhmm(b.turnoFin); if (i && f) u.turno = { inicio: i, fin: f }; }
   if (u.rol === 'soporte' && !u.turno) u.turno = { inicio: '07:00', fin: '15:00' };
+  if (u.rol === 'cliente' && !u.cliente) return bad(res, 400, 'Escribe el nombre del cliente');
   save(); ok(res);
 });
 app.delete('/api/usuarios/:usuario', auth, rol('coord'), (req, res) => {
@@ -157,11 +220,9 @@ app.delete('/api/usuarios/:usuario', auth, rol('coord'), (req, res) => {
 });
 
 // ---------- Servicios ----------
-app.get('/api/servicios', auth, (req, res) => {
-  const l = req.u.rol === 'tec' ? db.servicios.filter(s => nm(s.tecnico) === nm(req.u.nombre)) : db.servicios;
-  ok(res, { servicios: l.slice().reverse().map(s => ({ ...s, duracion: L.minutos(s) })) });
-});
-const nuevoServicio = o => ({ proveedor: 'ADMINISTRACION DE FLOTAS', instalador: 'CS142W', camara: 'No', accesorios: '', estatus: 'Enviado', urlDoc: '', creadoEn: Date.now(), ...o });
+app.get('/api/servicios', auth, (req, res) => ok(res, { servicios: visibles(req.u).slice().reverse().map(s => ({ ...pub(s), duracion: L.minutos(s) })) }));
+const fmtDe = s => { const f = conf().formatos; return f.find(x => x.id === s.formato) || f[0]; };
+const nuevoServicio = o => ({ formato: conf().formatos[0].id, proveedor: conf().empresa, instalador: '', camara: 'No', accesorios: '', estatus: 'Enviado', urlDoc: '', creadoEn: Date.now(), ...o });
 app.post('/api/servicios', auth, rol('coord'), (req, res) => {
   const b = req.body, folio = t(b.folioAcuerdo);
   if (!folio || !t(b.tecnicoAsignado)) return bad(res, 400, 'Falta el folio o el técnico');
@@ -169,12 +230,16 @@ app.post('/api/servicios', auth, rol('coord'), (req, res) => {
   db.servicios.push(nuevoServicio({ folio, tecnico: t(b.tecnicoAsignado), cliente: t(b.cliente), razon: t(b.razonSocial), lugar: t(b.lugarAtencion),
     recibe: t(b.recibe), contacto: t(b.contacto), ciudad: t(b.ciudad), edo: t(b.estado), motivo: t(b.motivo) || 'Instalación',
     fecha: t(b.fecha) || new Date(Date.now() - 6 * 3600e3).toISOString().slice(0, 10).split('-').reverse().join('/'), hora: t(b.hora),
-    camara: t(b.camara) || 'No', accesorios: t(b.accesorios) }));
+    camara: t(b.camara) || 'No', accesorios: t(b.accesorios), ...(conf().formatos.some(f => f.id === b.formato) ? { formato: b.formato } : {}) }));
   save(); ok(res);
 });
-app.delete('/api/servicios/:folio', auth, rol('coord'), (req, res) => {
+async function borraArchivos(s) {
+  await blobDel(s.urlDoc ? s.urlDoc.replace('/ods/', '') : ''); await blobDel(s.firmaTecBlob);
+  for (const m of (s.fotosMeta || [])) await blobDel(m.nombre);
+}
+app.delete('/api/servicios/:folio', auth, rol('coord'), async (req, res) => {
   const sv = db.servicios.find(s => nm(s.folio) === nm(req.params.folio));
-  if (USE_PG && sv && sv.urlDoc) pool.query(`DELETE FROM ${P}pdfs WHERE nombre = $1`, [sv.urlDoc.replace('/ods/', '')]).catch(() => {});
+  if (sv) await borraArchivos(sv);
   db.servicios = db.servicios.filter(s => nm(s.folio) !== nm(req.params.folio));
   db.validaciones = db.validaciones.filter(v => nm(v.folio) !== nm(req.params.folio)); save(); ok(res);
 });
@@ -203,11 +268,18 @@ app.post('/api/servicios/importar', auth, rol('coord'), up.single('archivo'), (r
   } catch (e) { bad(res, 400, 'No se pudo leer el Excel'); }
 });
 
+// ---------- Agenda e historial por unidad ----------
+app.get('/api/agenda', auth, (req, res) => {
+  const q = req.query, l = L.agenda(visibles(req.u), t(q.periodo) || '7dias', t(q.desde), t(q.hasta), Date.now(), q.todos === '1');
+  ok(res, { agenda: l.map(pub) });
+});
+app.get('/api/unidades', auth, (req, res) => ok(res, { unidades: L.unidades(visibles(req.u), t(req.query.q)).slice(0, 60) }));
+
 // ---------- KPI ----------
 app.get('/api/kpi', auth, rol('coord', 'soporte'), (req, res) => ok(res, L.kpi(db.servicios, t(req.query.periodo), t(req.query.desde), t(req.query.hasta))));
 
 // ---------- Validaciones (solicitudes del técnico atendidas por soporte) ----------
-app.get('/api/validaciones', auth, (req, res) => {
+app.get('/api/validaciones', auth, rol('coord', 'soporte', 'tec'), (req, res) => {
   const l = req.u.rol === 'tec' ? db.validaciones.filter(v => nm(v.tecnico) === nm(req.u.nombre)) : db.validaciones;
   ok(res, { validaciones: l.slice().reverse().map(v => ({ ...v, urlDoc: (db.servicios.find(s => nm(s.folio) === nm(v.folio)) || {}).urlDoc || '' })) });
 });
@@ -215,7 +287,7 @@ app.post('/api/validaciones', auth, rol('tec', 'coord'), (req, res) => {
   const s = db.servicios.find(x => nm(x.folio) === nm(req.body.folio));
   if (!s) return bad(res, 404, 'Servicio no encontrado');
   if (req.u.rol === 'tec' && nm(s.tecnico) !== nm(req.u.nombre)) return bad(res, 403, 'Ese servicio no está asignado a ti');
-  if (s.estatus !== 'Completado') return bad(res, 400, 'Primero termina la ODS del servicio');
+  if (s.estatus !== 'Completado') return bad(res, 400, 'La orden debe estar firmada por el cliente para solicitar validación');
   if (db.validaciones.some(v => nm(v.folio) === nm(s.folio) && ['Pendiente', 'En atención'].includes(v.estado))) return bad(res, 409, 'Ya hay una solicitud abierta para este folio');
   db.validaciones.push({ id: crypto.randomBytes(5).toString('hex'), folio: s.folio, tecnico: s.tecnico, cliente: s.cliente, motivo: s.motivo, nota: t(req.body.nota).slice(0, 500), estado: 'Pendiente', creadoEn: Date.now() });
   save(); ok(res);
@@ -255,7 +327,8 @@ app.get('/api/salud', auth, rol('coord', 'soporte'), async (req, res) => {
 });
 
 // ---------- ODS en PDF ----------
-const MOT = L.MOTIVOS, ELEC = L.ELEC, CY = '#00A9E0';
+const MOT = L.MOTIVOS, ELEC = L.ELEC;
+let CY = BRAND;
 function band(d, txt) {
   if (d.y > 690) d.addPage(); d.y += 6; const y = d.y;
   d.rect(40, y, 532, 18).fill(CY); d.fillColor('#fff').font('Helvetica-Bold').fontSize(10).text(txt, 40, y + 5, { width: 532, align: 'center' });
@@ -292,13 +365,16 @@ function tablaElec(d, s) {
   d.fontSize(9).text(t(s.obsElec), bx + 5, y0 + 21, { width: bw - 10, height: bh - 12 });
   d.x = 40; d.y = y0 + rh * (ELEC.length + 1) + 12;
 }
-function dataImg(u) { return u && u.startsWith('data:image') ? Buffer.from(u.split(',')[1], 'base64') : null; }
 
-function renderODS(d, s, files, b) {
-  if (fs.existsSync(LOGO)) d.image(LOGO, 40, 28, { height: 36 }); else d.font('Helvetica-Bold').fontSize(9).fillColor(CY).text('AT&T', 40, 40);
-  d.fillColor('#111').font('Helvetica').fontSize(15).text('Orden de servicio de la flotilla', 40, 38, { width: 532, align: 'center' });
-  d.y = 70; d.x = 40;
-  row(d, [['Proveedor', s.proveedor], ['Folio acuerdo', s.folio]]); row(d, [['Instalador', s.instalador], ['Fecha de visita', `${s.fecha} ${s.hora || ''}`]]);
+function renderODS(d, s, files, b, C, logo, F) {
+  CY = C.color;
+  let conLogo = false;
+  if (F.logo && logo) { try { d.image(logo, 40, 26, { height: 38 }); conLogo = true; } catch (e) {} }
+  d.fillColor('#111').font('Helvetica-Bold').fontSize(16).text(F.titulo, 40, 32, { width: 532, align: 'center' });
+  if (C.empresa) d.font('Helvetica').fontSize(9).fillColor('#666').text(C.empresa, 40, 53, { width: 532, align: 'center' });
+  d.moveTo(40, 69).lineTo(572, 69).lineWidth(1.2).strokeColor(CY).stroke();
+  d.y = 78; d.x = 40;
+  row(d, [['Empresa', s.proveedor], ['Folio', s.folio]]); row(d, [['Técnico', s.tecnico], ['Fecha de visita', `${s.fecha} ${s.hora || ''}`]]);
   band(d, 'MOTIVO DE LA VISITA');
   const y0 = d.y;
   MOT.forEach((m, i) => {
@@ -313,14 +389,15 @@ function renderODS(d, s, files, b) {
   [['Nombre del cliente', s.cliente], ['Razón social', s.razon], ['Lugar de atención', s.lugar], ['Nombre de quien recibe al técnico', s.recibe], ['Números de contacto', s.contacto], ['Ciudad', s.ciudad], ['Estado', s.edo]]
     .forEach(r => row(d, [r]));
   band(d, 'EQUIPO INSTALADO');
-  row(d, [['Serie GO9', s.serie], ['IMEI cámara', s.imei]]); row(d, [['Arnés', s.arnes], ['Número de SIM', s.sim]]);
-  row(d, [['Marca', s.marca], ['Modelo', s.modelo], ['Placas', s.placas]]); row(d, [['VIN', s.vin]]); row(d, [['Comentario del técnico', s.comentario]]);
+  const campos = F.campos.filter(c => c.on);
+  for (let i = 0; i < campos.length; i += 2) row(d, campos.slice(i, i + 2).map(c => [c.label, s[c.k]]));
+  row(d, [['Comentario del técnico', s.comentario]]);
   tablaElec(d, s);
 
-  const fotos = [['Foto del adherible GO9', files.foto_adherible], ['Foto IMEI y SIM de cámara', files.foto_imei_camara], ['Foto del VIN', files.foto_vin]]
+  const fotos = [['Foto del dispositivo (serie)', files.foto_adherible], ['Foto del IMEI / SIM', files.foto_imei_camara], ['Foto de placas / unidad', files.foto_vin]]
     .map(([l, a]) => [l, a && a[0]]).concat(Object.keys(files).filter(k => !['foto_adherible', 'foto_imei_camara', 'foto_vin'].includes(k))
       .flatMap(k => files[k].map((f, i) => [k === 'foto_tablero' ? 'Instalación ' + (i + 1) : k.replace(/^foto_/, '').replace(/_/g, ' '), f]))).filter(x => x[1]);
-  if (fotos.length) {
+  if (fotos.length && F.fotos) {
     if (d.y > 420) d.addPage();
     band(d, 'EVIDENCIA FOTOGRÁFICA'); let col = 0, y = d.y;
     fotos.forEach(([l, f]) => {
@@ -339,40 +416,122 @@ function renderODS(d, s, files, b) {
     d.moveTo(x, fy + 76).lineTo(x + 240, fy + 76).lineWidth(.5).strokeColor('#111').stroke();
     d.font('Helvetica').fontSize(10).fillColor('#111').text(t(n), x, fy + 80, { width: 240 }); d.fontSize(7.5).fillColor('#666').text(l, x, fy + 94, { width: 240 });
   });
-  d.x = 40; d.y = fy + 125;
-  d.font('Helvetica').fontSize(7.5).fillColor('#555').text('Nota: Recuerda que antes de concluir tu visita, es necesario comunicarte a Call Center para que nuestro cliente responda la encuesta de satisfacción. Posteriormente debes compartir el estatus de tu visita al ejecutivo. CC: 55-7100-2854. Soporte Técnico CLIENTE comunicarse al 01 800 211 4012', 40, d.y, { width: 532 });
+  d.x = 40; d.y = fy + 120;
+  if (s.firmaInfo) d.font('Helvetica').fontSize(7.5).fillColor('#555').text('Firma del cliente capturada de forma remota mediante link seguro el ' + new Date(s.firmaInfo.ts).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }) + '.', 40, d.y, { width: 532 });
+  if (C.nota) { d.moveDown(0.5); d.font('Helvetica').fontSize(7.5).fillColor('#555').text(C.nota, 40, d.y, { width: 532 }); }
 }
 
+async function renderPdf(s, files, b) {
+  const C = conf(); let logo = null;
+  try { logo = await blobGet('logo_marca'); } catch (e) {}
+  if (!logo && fs.existsSync(LOGO)) logo = fs.readFileSync(LOGO);
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: 'LETTER', margin: 40, bufferPages: true }), chunks = [];
+      doc.on('data', c => chunks.push(c)); doc.on('end', () => resolve(Buffer.concat(chunks))); doc.on('error', reject);
+      renderODS(doc, s, files, b, C, logo, fmtDe(s));
+      const rg = doc.bufferedPageRange(), gen = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+      for (let i = 0; i < rg.count; i++) {
+        doc.switchToPage(i); const mb = doc.page.margins.bottom; doc.page.margins.bottom = 0;
+        doc.font('Helvetica').fontSize(8).fillColor('#888').text(`${s.folio}  ·  Página ${i + 1} de ${rg.count}  ·  Generado el ${gen}`, 40, 760, { width: 532, align: 'center', lineBreak: false });
+        doc.page.margins.bottom = mb;
+      }
+      doc.end();
+    } catch (e) { reject(e); }
+  });
+}
 const agrupa = l => (l || []).reduce((o, f) => ((o[f.fieldname] = o[f.fieldname] || []).push(f), o), {});
+const uidDe = s => s.uid || (s.uid = crypto.randomBytes(6).toString('hex'));
+async function cierraConPdf(s, files, b) {
+  const buf = await renderPdf(s, files, b);
+  const nombre = `ODS_${s.folio.replace(/[^\w-]/g, '')}_${crypto.randomBytes(4).toString('hex')}.pdf`;
+  await blobPut(nombre, buf);
+  await blobDel(s.urlDoc ? s.urlDoc.replace('/ods/', '') : '');
+  s.urlDoc = '/ods/' + nombre; s.estatus = 'Completado'; s.completadoEn = Date.now();
+  if (!s.terminadoEn) s.terminadoEn = s.completadoEn;
+}
+const nuevoToken = s => { s.firmaToken = crypto.randomBytes(24).toString('hex'); s.firmaExp = Date.now() + 7 * 864e5; return '/firmar/' + s.firmaToken; };
+
 app.post('/api/generar-ods', auth, rol('tec', 'coord'), up.any(), async (req, res) => {
   try {
     const b = req.body, s = db.servicios.find(x => nm(x.folio) === nm(b.folioAcuerdo));
     if (!s) return bad(res, 404, 'Folio no encontrado');
     if (req.u.rol === 'tec' && nm(s.tecnico) !== nm(req.u.nombre)) return bad(res, 403, 'Ese servicio no está asignado a ti');
-    const elec = {}; ELEC.forEach((it, i) => { const v = t(b['elec_' + i]); if (['Sí', 'No', 'N/A'].includes(v)) elec[it] = v; });
-    Object.assign(s, { serie: t(b.serialGo9), imei: t(b.imeiCamara), sim: t(b.numeroSim), arnes: t(b.arnes), marca: t(b.marcaVehiculo), modelo: t(b.modeloVehiculo),
-      vin: t(b.vinVehiculo).toUpperCase(), placas: t(b.placasVehiculo).toUpperCase(), comentario: t(b.comentarioTecnico), elec, obsElec: t(b.obsElec) });
-    const name = `ODS_${s.folio.replace(/[^\w-]/g, '')}_${crypto.randomBytes(4).toString('hex')}.pdf`;
-    const doc = new PDFDocument({ size: 'LETTER', margin: 40, bufferPages: true }), out = fs.createWriteStream(path.join(ODS, name));
-    doc.pipe(out); renderODS(doc, s, agrupa(req.files), b);
-    const rg = doc.bufferedPageRange(), gen = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
-    for (let i = 0; i < rg.count; i++) {
-      doc.switchToPage(i); const mb = doc.page.margins.bottom; doc.page.margins.bottom = 0;
-      doc.font('Helvetica').fontSize(8).fillColor('#888').text(`${s.folio}  ·  Página ${i + 1} de ${rg.count}  ·  Generado el ${gen}`, 40, 760, { width: 532, align: 'center', lineBreak: false });
-      doc.page.margins.bottom = mb;
+    if (s.estatus === 'Completado' && req.u.rol === 'tec') return bad(res, 409, 'Esta orden ya fue firmada y cerrada');
+    if (s.firmando) return bad(res, 409, 'Esta orden se está firmando en este momento');
+    const C = conf(), F = fmtDe(s), falta = F.campos.filter(c => c.on && c.req && !t(b[c.k]));
+    if (falta.length) return bad(res, 400, 'Falta: ' + falta.map(c => c.label).join(', '));
+    if (!dataImg(b.firmaTecnico)) return bad(res, 400, 'Falta la firma del técnico');
+    s.formato = F.id;
+    F.campos.forEach(c => { if (c.on) s[c.k] = c.k === 'placas' ? t(b[c.k]).toUpperCase() : t(b[c.k]); });
+    s.comentario = t(b.comentarioTecnico);
+    if (F.elec) { const e = {}; ELEC.forEach((it, i) => { const v = t(b['elec_' + i]); if (['Sí', 'No', 'N/A'].includes(v)) e[it] = v; }); s.elec = e; s.obsElec = t(b.obsElec); }
+    else { delete s.elec; delete s.obsElec; }
+    s.terminadoEn = Date.now();
+    const files = agrupa(req.files), firmaC = dataImg(b.firmaCliente);
+    await borraArchivos({ fotosMeta: s.fotosMeta, firmaTecBlob: s.firmaTecBlob }); s.fotosMeta = []; s.firmaTecBlob = '';
+    if (firmaC) {
+      await cierraConPdf(s, files, b); s.firmaToken = null; delete s.firmaInfo;
+      save(); return ok(res, { descargaUrl: s.urlDoc });
     }
-    doc.end();
-    await new Promise((r, j) => { out.on('finish', r); out.on('error', j); });
-    if (USE_PG) {
-      await pool.query(`INSERT INTO ${P}pdfs (nombre, datos) VALUES ($1, $2) ON CONFLICT (nombre) DO NOTHING`, [name, fs.readFileSync(path.join(ODS, name))]);
-      fs.unlink(path.join(ODS, name), () => {});
-    }
-    s.estatus = 'Completado'; s.urlDoc = '/ods/' + name; s.completadoEn = Date.now(); save();
-    ok(res, { descargaUrl: s.urlDoc });
-  } catch (e) { console.error(e); bad(res, 500, 'No se pudo generar el PDF: ' + e.message); }
+    // El cliente no está: se guardan fotos y firma del técnico, y se genera un link para que firme desde su celular
+    const uid = uidDe(s); let n = 0; s.fotosMeta = [];
+    for (const campo of Object.keys(files)) for (const f of files[campo]) { const nombre = `fp_${uid}_${n++}.jpg`; await blobPut(nombre, f.buffer); s.fotosMeta.push({ campo, nombre }); }
+    s.firmaTecBlob = `ft_${uid}.png`; await blobPut(s.firmaTecBlob, dataImg(b.firmaTecnico));
+    s.nombreCliente = t(b.nombreCliente);
+    s.estatus = 'Pendiente de firma'; const firmaUrl = nuevoToken(s);
+    save(); ok(res, { pendienteFirma: true, firmaUrl, folio: s.folio, contacto: s.contacto });
+  } catch (e) { console.error(e); bad(res, 500, 'No se pudo generar la orden: ' + e.message); }
+});
+
+// ---------- Link de firma remota del cliente ----------
+app.post('/api/servicios/:folio/link-firma', auth, rol('tec', 'coord'), (req, res) => {
+  const s = db.servicios.find(x => nm(x.folio) === nm(req.params.folio));
+  if (!s || (req.u.rol === 'tec' && nm(s.tecnico) !== nm(req.u.nombre))) return bad(res, 404, 'Servicio no encontrado');
+  if (s.estatus !== 'Pendiente de firma') return bad(res, 400, 'Esta orden no está esperando firma');
+  const firmaUrl = (s.firmaToken && Date.now() < s.firmaExp) ? '/firmar/' + s.firmaToken : nuevoToken(s);
+  save(); ok(res, { firmaUrl, folio: s.folio, contacto: s.contacto, cliente: s.cliente });
+});
+const hits = {};
+const limite = (req, res, next) => {   // máximo 40 consultas por minuto por IP en las páginas públicas de firma
+  const m = Math.floor(Date.now() / 60e3), h = hits[req.ip] && hits[req.ip].m === m ? hits[req.ip] : (hits[req.ip] = { m, n: 0 });
+  if (++h.n > 40) return bad(res, 429, 'Demasiados intentos, espera un minuto'); next();
+};
+const porToken = tk => tk && tk.length >= 32 ? db.servicios.find(s => s.firmaToken === tk && s.estatus === 'Pendiente de firma') : null;
+app.get('/api/firma/:token', limite, (req, res) => {
+  const s = porToken(req.params.token), C = conf(), F = s ? fmtDe(s) : null;
+  if (!s) return bad(res, 404, 'Este link ya no es válido o la orden ya fue firmada.');
+  if (Date.now() > s.firmaExp) return bad(res, 410, 'Este link venció. Pide al técnico que te envíe uno nuevo.');
+  ok(res, { nombre: C.nombre, empresa: C.empresa, color: C.color, tieneLogo: F.logo && (C.logo || fs.existsSync(LOGO)),
+    orden: { folio: s.folio, cliente: s.cliente, lugar: s.lugar, ciudad: s.ciudad, fecha: s.fecha, hora: s.hora, motivo: s.motivo, tecnico: s.tecnico, recibe: s.recibe, comentario: s.comentario,
+      campos: F.campos.filter(c => c.on && s[c.k]).map(c => ({ label: c.label, valor: s[c.k] })), formato: F.nombre, elec: s.elec || null, obsElec: s.obsElec || '', nombreCliente: s.nombreCliente || s.recibe || '' } });
+});
+app.post('/api/firma/:token', limite, async (req, res) => {
+  const s = porToken(req.params.token);
+  if (!s) return bad(res, 404, 'Este link ya no es válido o la orden ya fue firmada.');
+  if (Date.now() > s.firmaExp) return bad(res, 410, 'Este link venció. Pide al técnico que te envíe uno nuevo.');
+  const firma = dataImg(req.body.firma), nombre = t(req.body.nombre).slice(0, 80);
+  if (!firma || firma.length < 500) return bad(res, 400, 'Dibuja tu firma en el recuadro');
+  if (!nombre) return bad(res, 400, 'Escribe tu nombre');
+  if (s.firmando) return bad(res, 409, 'La firma ya se está procesando');
+  s.firmando = true;
+  const respaldo = { firmaInfo: s.firmaInfo, urlDoc: s.urlDoc };
+  try {
+    const files = {};
+    for (const m of (s.fotosMeta || [])) { const buf = await blobGet(m.nombre); if (buf) (files[m.campo] = files[m.campo] || []).push({ buffer: buf }); }
+    const ft = s.firmaTecBlob ? await blobGet(s.firmaTecBlob) : null;
+    s.firmaInfo = { ts: Date.now(), ip: req.ip };
+    await cierraConPdf(s, files, { firmaCliente: req.body.firma, nombreCliente: nombre, firmaTecnico: ft ? 'data:image/png;base64,' + ft.toString('base64') : '' });
+    s.nombreCliente = nombre; s.firmaToken = null; s.firmaExp = 0;
+    await borraArchivos({ fotosMeta: s.fotosMeta, firmaTecBlob: s.firmaTecBlob }); s.fotosMeta = []; s.firmaTecBlob = '';
+    s.firmando = false; save(); ok(res);
+  } catch (e) {
+    console.error(e); s.firmando = false; s.firmaInfo = respaldo.firmaInfo; s.urlDoc = respaldo.urlDoc; s.estatus = 'Pendiente de firma';
+    bad(res, 500, 'No se pudo guardar la firma, inténtalo de nuevo');
+  }
 });
 
 cargar().then(() => {
   sembrar();
-  app.listen(PORT, () => console.log(APP_NAME + ' en puerto ' + PORT + (USE_PG ? ' (datos en base de datos externa)' : ' (datos en archivo local)') + (geotabCfg() ? ' · Geotab configurado' : '')));
+  app.listen(PORT, () => console.log(conf().nombre + ' en puerto ' + PORT + (USE_PG ? ' (datos en base de datos externa)' : ' (datos en archivo local)') + (geotabCfg() ? ' · Geotab configurado' : '')));
 }).catch(e => { console.error('No se pudo iniciar:', e.message); process.exit(1); });

@@ -26,6 +26,8 @@ function rango(p, desde, hasta, now = Date.now()) {
   const sod = startOfDay(now), l = local(now);
   if (p === 'hoy') return [sod, sod + DIA];
   if (p === 'ayer') return [sod - DIA, sod];
+  if (p === 'manana') return [sod + DIA, sod + 2 * DIA];
+  if (p === '7dias') return [sod, sod + 7 * DIA];
   if (p === 'semana') { const s = sod - ((l.dow + 6) % 7) * DIA; return [s, s + 7 * DIA]; }
   if (p === 'mes') return [Date.UTC(l.y, l.m - 1, 1) - TZ * H, Date.UTC(l.y, l.m, 1) - TZ * H];
   if (p === 'personalizado') {
@@ -35,14 +37,16 @@ function rango(p, desde, hasta, now = Date.now()) {
   return null;   // todas
 }
 
-const minutos = s => (s.abiertoEn && s.completadoEn && s.completadoEn >= s.abiertoEn) ? Math.round((s.completadoEn - s.abiertoEn) / 60000) : null;
+// Tiempo de servicio = de que el técnico abre la orden a que la termina (no cuenta la espera de la firma remota del cliente)
+const fin = s => s.terminadoEn || s.completadoEn;
+const minutos = s => (s.abiertoEn && fin(s) && fin(s) >= s.abiertoEn) ? Math.round((fin(s) - s.abiertoEn) / 60000) : null;
 const fmtMin = m => m == null ? '—' : m < 1 ? '<1 min' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
 const mediana = a => { if (!a.length) return null; const s = a.slice().sort((x, y) => x - y), i = s.length >> 1; return s.length % 2 ? s[i] : Math.round((s[i - 1] + s[i]) / 2); };
 
 function stats(l) {
   const dur = l.map(minutos).filter(x => x != null);
   return { servicios: l.length, completados: l.filter(s => s.estatus === 'Completado').length, enCurso: l.filter(s => s.estatus === 'En curso').length,
-    sinAbrir: l.filter(s => s.estatus === 'Enviado').length,
+    sinAbrir: l.filter(s => s.estatus === 'Enviado').length, porFirmar: l.filter(s => s.estatus === 'Pendiente de firma').length,
     prom: dur.length ? Math.round(dur.reduce((a, b) => a + b, 0) / dur.length) : null, mediana: mediana(dur) };
 }
 function kpi(servicios, p, desde, hasta, now = Date.now()) {
@@ -74,4 +78,56 @@ function categoria(dias) {
   return dias < 7 ? 'OK' : dias <= 15 ? 'Advertencia' : dias <= 50 ? 'Crítico' : dias <= 100 ? 'Crítico alto' : 'Crítico severo';
 }
 
-module.exports = { MOTIVOS, ELEC, CATEGORIAS, visitaTs, rango, minutos, fmtMin, stats, kpi, turno, categoria, local };
+
+// ---------- Campos del equipo configurables ----------
+const CAMPOS_DEF = [
+  { k: 'serie', label: 'Serie del dispositivo', on: true, req: true }, { k: 'imei', label: 'IMEI', on: true, req: true },
+  { k: 'sim', label: 'Número de SIM asociado', on: true, req: false }, { k: 'economico', label: 'Número económico', on: true, req: false },
+  { k: 'placas', label: 'Placas', on: true, req: true },
+  ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => ({ k: 'extra' + n, label: 'Campo extra ' + n, on: false, req: false }))];
+function mezclaCampos(g) {
+  const m = {}; (Array.isArray(g) ? g : []).forEach(c => { if (c && c.k) m[c.k] = c; });
+  return CAMPOS_DEF.map(d => { const o = m[d.k] || {}, on = o.on === undefined ? d.on : !!o.on;
+    return { k: d.k, label: String(o.label || d.label).trim().slice(0, 40) || d.label, on, req: on && (o.req === undefined ? d.req : !!o.req) }; });
+}
+
+// Formatos de orden: cada uno con título, campos propios, tabla eléctrica y logo opcionales
+function normFormatos(arr, base = {}, rnd = () => Math.random().toString(16).slice(2, 8)) {
+  let l = Array.isArray(arr) && arr.length ? arr : [{ id: 'std', nombre: 'Orden de servicio', campos: base.campos, elec: base.elec, logo: false }];
+  const ids = new Set();
+  return l.slice(0, 12).map((f, i) => {
+    let id = String((f && f.id) || '').replace(/[^\w-]/g, '').slice(0, 20) || rnd(); while (ids.has(id)) id = rnd(); ids.add(id);
+    const nombre = String((f && f.nombre) || '').trim().slice(0, 40) || 'Formato ' + (i + 1);
+    return { id, nombre, titulo: String((f && f.titulo) || '').trim().slice(0, 60) || nombre, campos: mezclaCampos(f && f.campos),
+      elec: !!(f && f.elec), logo: !!(f && f.logo), fotos: !(f && f.fotos === false) };
+  });
+}
+
+// ---------- Agenda, historial por unidad y avisos ----------
+function agenda(servicios, p, desde, hasta, now = Date.now(), conListos = false) {
+  const r = rango(p, desde, hasta, now);
+  return servicios.filter(s => conListos || s.estatus !== 'Completado').map(s => ({ s, t: visitaTs(s) }))
+    .filter(x => x.t != null && (!r || (x.t >= r[0] && x.t < r[1]))).sort((a, b) => a.t - b.t).map(x => ({ ...x.s, ts: x.t }));
+}
+const norm = v => String(v ?? '').trim().toUpperCase().replace(/[\s-]+/g, '');   // "abc-123" = "ABC 123"
+const claveUnidad = s => norm(s.placas) || norm(s.imei) || norm(s.serie) || norm(s.economico) || '';
+function unidades(servicios, q = '') {
+  const g = {};
+  servicios.forEach(s => { const k = claveUnidad(s); if (k) (g[k] = g[k] || []).push(s); });
+  const nq = norm(q), qq = String(q || '').trim().toLowerCase();
+  return Object.entries(g).map(([clave, l]) => {
+    l.sort((a, b) => (visitaTs(b) || 0) - (visitaTs(a) || 0));
+    const pick = k => (l.find(x => x[k]) || {})[k] || '';
+    return { clave, placas: pick('placas'), economico: pick('economico'), imei: pick('imei'), serie: pick('serie'), sim: pick('sim'), cliente: l[0].cliente || '',
+      total: l.length, ultima: visitaTs(l[0]),
+      servicios: l.map(s => ({ folio: s.folio, fecha: s.fecha, hora: s.hora, motivo: s.motivo, tecnico: s.tecnico, cliente: s.cliente, estatus: s.estatus, urlDoc: s.urlDoc || '' })) };
+  }).filter(u => !nq || [u.placas, u.economico, u.imei, u.serie, u.sim].some(v => norm(v).includes(nq)) || u.cliente.toLowerCase().includes(qq))
+    .sort((a, b) => (b.ultima || 0) - (a.ultima || 0));
+}
+function waLink(tel, texto) {
+  const m = String(tel || '').match(/\+?\d[\d\s().-]{8,}\d/); if (!m) return '';
+  let d = m[0].replace(/\D/g, ''); if (d.length === 10) d = '52' + d; if (d.length < 11) return '';
+  return 'https://wa.me/' + d + '?text=' + encodeURIComponent(texto);
+}
+
+module.exports = { CAMPOS_DEF, mezclaCampos, normFormatos, agenda, unidades, claveUnidad, waLink, MOTIVOS, ELEC, CATEGORIAS, visitaTs, rango, minutos, fmtMin, stats, kpi, turno, categoria, local };

@@ -51,6 +51,42 @@ assert.deepStrictEqual([null, 0, 6, 7, 15, 16, 50, 51, 100, 101].map(L.categoria
   ['Desconocido', 'OK', 'OK', 'Advertencia', 'Advertencia', 'Crítico', 'Crítico', 'Crítico alto', 'Crítico alto', 'Crítico severo']);
 assert.strictEqual(L.ELEC.length, 16);
 
+
+// --- Firma remota: la espera de la firma no cuenta como tiempo de servicio
+const b2 = Date.UTC(2026, 10, 3, 16);
+assert.strictEqual(L.minutos({ abiertoEn: b2, terminadoEn: b2 + 20 * min, completadoEn: b2 + 300 * min }), 20);
+assert.strictEqual(L.stats([{ estatus: 'Pendiente de firma' }, { estatus: 'Completado' }]).porFirmar, 1);
+
+// --- Agenda
+assert.deepStrictEqual(L.agenda(S, '7dias', null, null, NOW).map(x => x.folio), ['C']);
+assert.deepStrictEqual(L.agenda(S, 'todas', null, null, NOW, true).map(x => x.folio), ['D', 'A', 'B', 'C']);
+assert.strictEqual(L.agenda(S, 'manana', null, null, NOW).length, 0);
+
+// --- Historial por unidad
+const SV = [
+  { folio: '1', placas: 'abc-123', imei: '111', cliente: 'ACME', fecha: '01/11/2026', hora: '10:00', estatus: 'Completado', motivo: 'Instalación', tecnico: 'X' },
+  { folio: '2', placas: 'ABC 123', economico: 'E-9', cliente: 'ACME', fecha: '03/11/2026', hora: '10:00', estatus: 'Completado', motivo: 'Revisión', tecnico: 'Y' },
+  { folio: '3', imei: '222', cliente: 'BETA', fecha: '02/11/2026', hora: '09:00', estatus: 'Completado', motivo: 'Instalación', tecnico: 'X' },
+  { folio: '4', cliente: 'Z', fecha: '02/11/2026', hora: '09:00', estatus: 'Enviado' }];
+let un = L.unidades(SV);
+assert.strictEqual(un.length, 2); assert.strictEqual(un[0].total, 2); assert.strictEqual(un[0].servicios[0].folio, '2');
+assert.strictEqual(un[0].economico, 'E-9'); assert.strictEqual(un[0].imei, '111');
+assert.strictEqual(L.unidades(SV, 'e-9').length, 1); assert.strictEqual(L.unidades(SV, 'beta').length, 1); assert.strictEqual(L.unidades(SV, 'zzz').length, 0);
+
+// --- Avisos por WhatsApp y campos configurables
+assert.strictEqual(L.waLink('55 1234 5678 / 55 9999 0000', 'Hola'), 'https://wa.me/525512345678?text=Hola');
+assert.strictEqual(L.waLink('abc', 'x'), '');
+const cm = L.mezclaCampos([{ k: 'placas', label: 'Placa', req: false }, { k: 'extra1', label: 'Antena', on: true }, { k: 'sim', on: false }]);
+assert.strictEqual(cm.length, 13); assert.strictEqual(cm[4].label, 'Placa'); assert.strictEqual(cm[4].req, false);
+assert.strictEqual(cm[5].on, true); assert.strictEqual(cm[5].label, 'Antena'); assert.strictEqual(cm[2].on, false); assert.strictEqual(cm[0].req, true);
+
+// --- Formatos de orden
+let fm = L.normFormatos(null, { campos: [{ k: 'placas', label: 'Placa' }], elec: true });
+assert.strictEqual(fm.length, 1); assert.strictEqual(fm[0].id, 'std'); assert.strictEqual(fm[0].elec, true); assert.strictEqual(fm[0].titulo, 'Orden de servicio');
+fm = L.normFormatos([{ id: 'a', nombre: 'Retiro', titulo: '', elec: false, logo: true }, { id: 'a', nombre: '', fotos: false }], {}, () => 'zz9');
+assert.strictEqual(fm.length, 2); assert.strictEqual(fm[0].titulo, 'Retiro'); assert.strictEqual(fm[0].logo, true);
+assert.notStrictEqual(fm[1].id, 'a'); assert.strictEqual(fm[1].nombre, 'Formato 2'); assert.strictEqual(fm[1].fotos, false); assert.strictEqual(fm[1].campos.length, 13);
+
 // --- Geotab con servidor simulado
 (async () => {
   const llamadas = [];
