@@ -1,0 +1,23 @@
+{
+  "name": "ordenes-servicio-base",
+  "version": "4.0.0",
+  "description": "Órdenes de servicio, validaciones, KPI y soporte en turno (versión base configurable)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pdfkit": "^0.15.0",
+    "pg": "^8.11.0",
+    "xlsx": "^0.18.5"
+  }
+}
