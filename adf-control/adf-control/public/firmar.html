@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Firma de conformidad</title>
+<style>
+  :root{--c:#0f766e}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f1f5f9;color:#0f172a}
+  .wrap{max-width:560px;margin:0 auto;padding:16px}
+  .card{background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.1);padding:16px;margin-bottom:14px}
+  h1{font-size:19px;margin:0 0 2px}h2{font-size:15px;margin:0 0 8px}
+  .sub{font-size:13px;color:#64748b}
+  .f{margin:8px 0}.f b{display:block;font-size:12px;color:#64748b;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:13px}td{padding:4px 0;border-bottom:1px solid #f1f5f9}
+  input[type=text]{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px}
+  canvas{width:100%;height:170px;border:2px dashed #94a3b8;border-radius:10px;background:#fff;touch-action:none;display:block}
+  button{border:0;border-radius:10px;padding:13px 16px;font-size:16px;font-weight:700;cursor:pointer}
+  .main{background:var(--c);color:#fff;width:100%;margin-top:12px}.main:disabled{opacity:.5}
+  .sec{background:#e2e8f0;color:#0f172a;margin-top:6px;padding:7px 12px;font-size:13px}
+  .err{color:#b91c1c;font-size:14px;margin-top:8px}
+  .ok{text-align:center;padding:30px 10px}.ok .big{font-size:46px}
+  img{max-height:44px;display:block;margin:0 auto 8px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="card">Cargando...</div></div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const token = location.pathname.split('/').filter(Boolean).pop();
+let firmo = false;
+function fallo(m){ $('#app').innerHTML = `<div class="card"><h1>No se puede abrir este link</h1><p class="sub" style="margin-top:8px">${esc(m)}</p></div>`; }
+async function carga(){
+  let r, d; try { r = await fetch('/api/firma/' + encodeURIComponent(token)); d = await r.json(); } catch(e){ return fallo('No hay conexión. Inténtalo de nuevo.'); }
+  if (!r.ok || d.exito === false) return fallo(d.error || 'Link no válido.');
+  document.documentElement.style.setProperty('--c', d.color || '#0f766e'); document.title = 'Firma de conformidad · ' + d.nombre;
+  const o = d.orden, f = (l, v) => v ? `<div class="f"><b>${esc(l)}</b>${esc(v)}</div>` : '';
+  $('#app').innerHTML = `<div class="card" style="text-align:center">${d.tieneLogo ? '<img src="/logo" alt="">' : ''}<h1>${esc(d.empresa || d.nombre)}</h1><div class="sub">Firma de conformidad del servicio</div></div>
+    <div class="card"><h2>Orden ${esc(o.folio)}</h2>
+      ${f('Cliente', o.cliente)}${f('Motivo de la visita', o.motivo)}${f('Fecha', o.fecha + ' ' + (o.hora || ''))}${f('Lugar', [o.lugar, o.ciudad].filter(Boolean).join(', '))}${f('Técnico', o.tecnico)}
+      ${o.campos.map(c => f(c.label, c.valor)).join('')}${f('Comentario del técnico', o.comentario)}
+      ${o.elec ? `<div class="f"><b>Partes eléctricas</b></div><table>${Object.entries(o.elec).map(([k,v]) => `<tr><td>${esc(k)}</td><td style="text-align:right"><b>${esc(v)}</b></td></tr>`).join('')}</table>${f('Observaciones', o.obsElec)}` : ''}
+    </div>
+    <div class="card"><h2>Tu firma</h2><p class="sub" style="margin:0 0 8px">Al firmar confirmas que recibiste el servicio descrito arriba.</p>
+      <label class="sub">Tu nombre</label><input type="text" id="nom" value="${esc(o.nombreCliente)}" autocomplete="name">
+      <div class="sub" style="margin:10px 0 4px">Firma con el dedo en el recuadro</div><canvas id="cv"></canvas>
+      <button class="sec" id="lim">Borrar firma</button><div class="err" id="err"></div>
+      <button class="main" id="env">Aceptar y firmar</button></div>`;
+  const c = $('#cv'), k = window.devicePixelRatio || 1, rc = c.getBoundingClientRect(); c.width = rc.width * k; c.height = rc.height * k;
+  const g = c.getContext('2d'); g.scale(k, k); g.lineWidth = 2.4; g.lineCap = 'round'; g.strokeStyle = '#0f172a';
+  let dib = false; const pos = e => { const b = c.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  c.onpointerdown = e => { dib = true; c.setPointerCapture(e.pointerId); g.beginPath(); g.moveTo(...pos(e)); };
+  c.onpointermove = e => { if (!dib) return; g.lineTo(...pos(e)); g.stroke(); firmo = true; };
+  c.onpointerup = c.onpointercancel = () => { dib = false; };
+  $('#lim').onclick = () => { g.clearRect(0, 0, c.width, c.height); firmo = false; };
+  $('#env').onclick = async () => {
+    $('#err').textContent = '';
+    if (!$('#nom').value.trim()) return $('#err').textContent = 'Escribe tu nombre.';
+    if (!firmo) return $('#err').textContent = 'Dibuja tu firma en el recuadro.';
+    const b = $('#env'); b.disabled = true; b.textContent = 'Enviando...';
+    try {
+      const r = await fetch('/api/firma/' + encodeURIComponent(token), { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ firma:c.toDataURL('image/png'), nombre:$('#nom').value.trim() }) });
+      const d = await r.json();
+      if (!r.ok || d.exito === false) throw new Error(d.error || 'Error');
+      $('#app').innerHTML = '<div class="card ok"><div class="big">✅</div><h1>¡Listo, gracias!</h1><p class="sub">Tu firma quedó registrada y la orden de servicio quedó cerrada. Ya puedes cerrar esta página.</p></div>';
+    } catch(e){ $('#err').textContent = e.message; b.disabled = false; b.textContent = 'Aceptar y firmar'; }
+  };
+}
+carga();
+</script>
+</body>
+</html>
