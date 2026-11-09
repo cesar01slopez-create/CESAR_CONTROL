@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orden de servicio</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#1e293b;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#e2e8f0}
+  header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0f172a;border-bottom:1px solid #334155}
+  header .t{flex:1;min-width:0;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .b{background:#0f766e;color:#fff;border:0;border-radius:9px;padding:9px 14px;font-size:14px;font-weight:600;text-decoration:none;cursor:pointer;white-space:nowrap}
+  .b2{background:#334155}
+  #pg{padding:14px 8px 40px;display:flex;flex-direction:column;align-items:center;gap:12px}
+  canvas{max-width:100%;height:auto!important;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.45);border-radius:4px}
+  #msg{text-align:center;padding:50px 20px;color:#94a3b8}
+  #msg a{color:#5eead4}
+  @media print{header,#msg{display:none}body{background:#fff}#pg{padding:0;gap:0}canvas{box-shadow:none;page-break-after:always}}
+</style>
+</head>
+<body>
+<header>
+  <div class="t" id="tit">Orden de servicio</div>
+  <button class="b b2" id="imp" hidden>Imprimir</button>
+  <a class="b" id="dl" href="#">Descargar</a>
+</header>
+<div id="msg">Cargando documento...</div>
+<div id="pg"></div>
+<script>
+const q = new URLSearchParams(location.search), nombre = (q.get('f') || '').replace(/[^\w.-]/g, '');
+const $ = s => document.querySelector(s);
+if (!/^[\w.-]+\.pdf$/.test(nombre)) { $('#msg').textContent = 'Documento no válido.'; $('#dl').hidden = true; }
+else {
+  const crudo = '/ods/' + nombre;
+  $('#dl').href = crudo + '?dl=1';
+  const m = nombre.match(/^ODS_(.+)_[0-9a-f]{8,}\.pdf$/); if (m) { $('#tit').textContent = 'Orden de servicio ' + m[1]; document.title = 'Orden ' + m[1]; }
+  const falla = () => { $('#msg').innerHTML = 'No se pudo mostrar el documento aquí. <a href="' + crudo + '">Ábrelo directamente</a> o usa Descargar.'; };
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  s.onerror = falla;
+  s.onload = async () => {
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const r = await fetch(crudo); if (!r.ok) { $('#msg').textContent = 'Documento no encontrado.'; $('#dl').hidden = true; return; }
+      const pdf = await pdfjsLib.getDocument({ data: await r.arrayBuffer() }).promise, k = Math.min(window.devicePixelRatio || 1, 2);
+      $('#msg').remove();
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const pagina = await pdf.getPage(i), v0 = pagina.getViewport({ scale: 1 });
+        const ancho = Math.min(window.innerWidth - 16, 900), esc = ancho / v0.width, v = pagina.getViewport({ scale: esc * k });
+        const c = document.createElement('canvas'); c.width = v.width; c.height = v.height; c.style.width = ancho + 'px'; $('#pg').appendChild(c);
+        await pagina.render({ canvasContext: c.getContext('2d'), viewport: v }).promise;
+      }
+      $('#imp').hidden = false;
+    } catch (e) { falla(); }
+  };
+  document.head.appendChild(s);
+  $('#imp').onclick = () => window.print();
+}
+</script>
+</body>
+</html>
