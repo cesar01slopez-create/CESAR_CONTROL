@@ -114,9 +114,9 @@ let token = ls.get('ods_tk'), me = null, cfg = { nombre:'Órdenes de Servicio', 
 let S = { servicios:[], vals:[], usuarios:[], salud:null }, tab = '', filtro = 'Todos', busca = '', capFolio = '', saludCat = '', saludQ = '', kpiP = 'mes', kpiD = '', kpiH = '', agP = '7dias', agTodos = false, agTec = '', cfgEdit = null, cfgId = null;
 const ROL = { coord:'Coordinador', tec:'Técnico', soporte:'Soporte', cliente:'Cliente' };
 const TABS = {
-  coord:[['servicios','Servicios'],['nuevo','Nuevo servicio'],['agenda','Agenda'],['unidades','Unidades'],['solic','Solicitudes'],['usuarios','Usuarios'],['kpi','KPI'],['salud','Salud de equipos'],['config','Configuración']],
-  soporte:[['solic','Solicitudes'],['servicios','Servicios'],['agenda','Agenda'],['unidades','Unidades'],['kpi','KPI'],['salud','Salud de equipos']],
-  tec:[['servicios','Mis servicios'],['capturar','Capturar ODS'],['agenda','Agenda'],['unidades','Unidades'],['solic','Solicitudes']],
+  coord:[['servicios','Servicios'],['nuevo','Nuevo servicio'],['agenda','Agenda'],['unidades','Unidades'],['vin','VIN y arnés'],['solic','Solicitudes'],['usuarios','Usuarios'],['kpi','KPI'],['salud','Salud de equipos'],['config','Configuración']],
+  soporte:[['solic','Solicitudes'],['servicios','Servicios'],['agenda','Agenda'],['unidades','Unidades'],['vin','VIN y arnés'],['kpi','KPI'],['salud','Salud de equipos']],
+  tec:[['servicios','Mis servicios'],['capturar','Capturar ODS'],['agenda','Agenda'],['unidades','Unidades'],['vin','VIN y arnés'],['solic','Solicitudes']],
   cliente:[['servicios','Mis órdenes'],['agenda','Agenda'],['unidades','Unidades']] };
 const tabsRol = () => TABS[me.rol].filter(([k]) => k !== 'salud' || cfg.geotab);
 const ESTATUS = ['Todos','Enviado','En curso','Pendiente de firma','Completado'];
@@ -207,13 +207,15 @@ async function cargaTurno(){
 async function irTab(t){
   tab = t;
   document.querySelectorAll('.tab').forEach(e => e.classList.toggle('on', e.dataset.t === t));
-  const P = { servicios:pintaServ, nuevo:pintaNuevo, capturar:pintaCap, solic:pintaSolic, usuarios:pintaUsers, kpi:pintaKpi, salud:pintaSalud, agenda:pintaAgenda, unidades:pintaUnidades, config:pintaConfig };
+  const P = { servicios:pintaServ, nuevo:pintaNuevo, capturar:pintaCap, solic:pintaSolic, usuarios:pintaUsers, kpi:pintaKpi, salud:pintaSalud, agenda:pintaAgenda, unidades:pintaUnidades, vin:pintaVin, config:pintaConfig };
   if (t === 'config'){ cfgEdit = null; cfgId = null; }
   try {
     if (['servicios','capturar','nuevo','agenda'].includes(t)) await cargaServ();
     if (t === 'solic' || t === 'capturar') await cargaVals();
     if (['usuarios','nuevo','agenda','config'].includes(t) && me.rol === 'coord') await cargaUsuarios();
+
   } catch(e){ toast(e.message, 1); }
+  if (t === 'config' && me.rol === 'coord'){ try { S.reglas = (await api('/reglas-arnes')).reglas; S.reglasEdit = JSON.parse(JSON.stringify(S.reglas)); } catch(e){ S.reglasEdit = []; toast(e.message, 1); } }
   P[t]();
 }
 
@@ -254,7 +256,7 @@ function detalle(folio){
     <div class="text-xs text-slate-500">${esc(F.nombre || '')}</div>
     <div class="grid grid-cols-2 gap-3 mt-3">${f('Técnico',s.tecnico)}${f('Fecha',s.fecha + ' ' + s.hora)}${f('Motivo',s.motivo)}${f('Cliente',s.cliente)}${f('Razón social',s.razon)}${f('Lugar',s.lugar)}
       ${f('Recibe',s.recibe)}${f('Contacto',s.contacto)}${f('Ciudad',s.ciudad)}${f('Estado',s.edo)}
-      ${F.campos.filter(c => c.on).map(c => f(c.label, s[c.k])).join('')}${f('Arnés utilizado', s.arnes)}
+      ${F.campos.filter(c => c.on).map(c => f(c.label, s[c.k])).join('')}${f('Vehículo', [s.vMarca, s.vModelo, s.vAnio].filter(Boolean).join(' '))}${f('Arnés utilizado', s.arnes)}
       ${f('Tiempo de servicio', s.duracion != null ? fmtMin(s.duracion) : '')}${f('Abierto',s.abiertoEn ? fmtTs(s.abiertoEn) : '')}${f('Terminado por el técnico',s.terminadoEn ? fmtTs(s.terminadoEn) : '')}${f('Firmado por el cliente',s.estatus === 'Completado' && s.completadoEn ? fmtTs(s.completadoEn) : '')}</div>
     ${s.comentario ? `<div class="mt-3">${f('Comentario del técnico', s.comentario)}</div>` : ''}
     ${s.elec && Object.keys(s.elec).length ? `<div class="mt-3 text-xs text-slate-500">Partes eléctricas</div><div class="grid grid-cols-2 gap-x-3 text-sm">${Object.entries(s.elec).map(([k,v]) => `<div>${esc(k)}: <b>${esc(v)}</b></div>`).join('')}</div>${s.obsElec ? `<div class="mt-2 text-sm">Obs.: ${esc(s.obsElec)}</div>` : ''}` : ''}
@@ -333,6 +335,8 @@ function cuerpoForm(s){
   return `<div class="text-xs text-slate-500 mt-2">Formato: ${esc(F.nombre)}</div>
     <h3 class="font-semibold mt-4">Equipo</h3>
     <div class="grid sm:grid-cols-2 gap-x-4">${F.campos.filter(c => c.on).map(c => `<div><label class="l">${esc(c.label)}${c.req ? ' *' : ''}</label><input name="${c.k}" data-req="${c.req ? 1 : ''}" data-lbl="${esc(c.label)}" class="inp" ${c.k === 'placas' ? 'autocapitalize="characters"' : ''}></div>`).join('')}</div>
+    ${F.campos.some(c => c.k === 'vin' && c.on) ? `<input type="hidden" name="vMarca"><input type="hidden" name="vModelo"><input type="hidden" name="vAnio"><input type="hidden" name="vTipo">
+      <div class="mt-2"><button type="button" class="btn btn2 btns" data-a="vinCap">Decodificar VIN y sugerir arnés</button><div id="vinBox" class="mt-2"></div></div>` : ''}
     ${(cfg.arneses || []).length ? `<div class="mt-2"><label class="l">Arnés utilizado *</label><select name="arnes" data-req="1" data-lbl="Arnés utilizado" class="inp"><option value="">Selecciona...</option>${cfg.arneses.map(a => `<option>${esc(a)}</option>`).join('')}</select></div>` : ''}
     <label class="l">Comentario del técnico</label><textarea name="comentarioTecnico" class="inp" rows="2"></textarea>
     ${F.elec ? `<h3 class="font-semibold mt-5">Partes eléctricas funcionando</h3>
@@ -496,7 +500,7 @@ async function pintaAgenda(){
 // ---------- Historial por unidad ----------
 let uTimer;
 function pintaUnidades(){
-  $('#pane').innerHTML = `<div class="card mb-3"><label class="l" style="margin-top:0">Buscar unidad por placas, IMEI, SIM, serie, número económico o cliente</label><input id="uq" class="inp" placeholder="Ej. ABC123"></div><div id="uBody" class="text-slate-500">Cargando...</div>`;
+  $('#pane').innerHTML = `<div class="card mb-3"><label class="l" style="margin-top:0">Buscar unidad por placas, IMEI, SIM, serie, VIN, número económico o cliente</label><input id="uq" class="inp" placeholder="Ej. ABC123"></div><div id="uBody" class="text-slate-500">Cargando...</div>`;
   $('#uq').addEventListener('input', () => { clearTimeout(uTimer); uTimer = setTimeout(buscaUnidades, 300); });
   buscaUnidades();
 }
@@ -504,11 +508,65 @@ async function buscaUnidades(){
   try {
     const u = (await api('/unidades?q=' + encodeURIComponent($('#uq').value))).unidades;
     $('#uBody').innerHTML = u.length ? u.map(x => `<div class="card mb-3"><div class="flex flex-wrap justify-between gap-2"><div><div class="font-bold text-lg">${esc(x.placas || x.economico || x.imei || x.serie)}</div>
-      <div class="text-xs text-slate-500">${[x.economico && 'Económico ' + x.economico, x.imei && 'IMEI ' + x.imei, x.serie && 'Serie ' + x.serie, x.sim && 'SIM ' + x.sim, x.cliente].filter(Boolean).map(esc).join(' · ')}</div></div><div class="text-sm text-slate-600">${x.total} servicio${x.total === 1 ? '' : 's'}</div></div>
+      <div class="text-xs text-slate-500">${[x.economico && 'Económico ' + x.economico, x.imei && 'IMEI ' + x.imei, x.serie && 'Serie ' + x.serie, x.sim && 'SIM ' + x.sim, x.vehiculo, x.vin && 'VIN ' + x.vin, x.arnes && 'Arnés: ' + x.arnes, x.cliente].filter(Boolean).map(esc).join(' · ')}</div></div><div class="text-sm text-slate-600">${x.total} servicio${x.total === 1 ? '' : 's'}</div></div>
       <div class="wrap mt-2"><table><tbody>${x.servicios.map(s => `<tr><td class="whitespace-nowrap">${esc(s.fecha)} ${esc(s.hora)}</td><td>${esc(s.motivo)}</td><td>${esc(s.tecnico)}</td><td>${bd(s.estatus)}</td><td class="text-right">${s.urlDoc && s.estatus === 'Completado' ? `<a class="btn btn2 btns" href="${esc(ver(s.urlDoc))}" target="_blank">Ver PDF</a>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`).join('')
       : '<div class="card text-sm text-slate-500">No se encontraron unidades. El historial se arma con las órdenes que ya tienen placas, IMEI, serie o número económico.</div>';
   } catch(e){ $('#uBody').textContent = e.message; }
 }
+
+
+// ---------- VIN y arnés ----------
+const CATV = { ligero:'Auto, SUV o pickup', van:'Van / camioneta de carga', pesado:'Camión pesado / tractocamión', autobus:'Autobús', moto:'Motocicleta', remolque:'Remolque', otro:'Otro' };
+const vinNorm = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function pintaVin(){
+  $('#pane').innerHTML = `<div class="card"><h2 class="font-bold text-lg">VIN y arnés</h2>
+    <p class="text-sm text-slate-600 mt-1">Escribe el VIN (17 caracteres) para saber qué vehículo es y qué arnés llevar antes de la instalación.</p>
+    <div class="flex flex-wrap gap-2 mt-3"><input id="vinIn" class="inp" style="max-width:340px;text-transform:uppercase" maxlength="22" placeholder="Ej. 1FTFW1ET5DFC10312" autocapitalize="characters" autocomplete="off"><button class="btn" data-a="vinBusca">Decodificar</button></div>
+    <div id="vinOut" class="mt-3"></div></div>
+    <div class="card mt-4"><h3 class="font-semibold">¿No tienes el VIN o no se encontró?</h3><p class="text-xs text-slate-500">Busca el arnés con la marca y el modelo.</p>${manualBloque('vin')}<div id="vinOut2" class="mt-2"></div></div>
+    <p class="text-xs text-slate-500 mt-3">Los datos del VIN vienen de la base pública de NHTSA (Estados Unidos). Funciona muy bien con vehículos de mercado norteamericano; algunos modelos vendidos solo en México pueden no aparecer.</p>`;
+  $('#vinIn').addEventListener('keydown', e => { if (e.key === 'Enter') A.vinBusca(); });
+}
+function manualBloque(ctx){
+  return `<div id="man_${ctx}" class="grid sm:grid-cols-5 gap-2 mt-2 items-end">
+    <div><label class="l" style="margin-top:0">Marca</label><input class="inp vm" data-k="marca" placeholder="Ford"></div>
+    <div><label class="l" style="margin-top:0">Modelo</label><input class="inp vm" data-k="modelo" placeholder="F-150"></div>
+    <div><label class="l" style="margin-top:0">Año</label><input class="inp vm" data-k="anio" inputmode="numeric" maxlength="4" placeholder="2020"></div>
+    <div><label class="l" style="margin-top:0">Tipo</label><select class="inp vm" data-k="cat">${Object.entries(CATV).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+    <div><button type="button" class="btn w-full" data-a="vinManual" data-c="${ctx}">Buscar arnés</button></div></div>`;
+}
+async function vinManual(ctx){
+  const g = k => ($(`#man_${ctx} [data-k="${k}"]`) || {}).value || '', body = { marca:g('marca'), modelo:g('modelo'), anio:g('anio'), cat:g('cat') };
+  try { const r = await api('/arnes/sugerir', { method:'POST', body }); r.decodificado = true; r.manual = true; r.dvOk = true; vinMuestra(r, ctx === 'vin' ? 'vin2' : ctx); }
+  catch(e){ toast(e.message, 1); }
+}
+async function vinConsulta(vin, ctx){
+  const box = $(ctx === 'cap' ? '#vinBox' : '#vinOut'); if (!box) return; box.innerHTML = '<p class="text-sm text-slate-500">Consultando el VIN...</p>';
+  try { vinMuestra(await api('/vin/' + encodeURIComponent(vin)), ctx); } catch(e){ box.innerHTML = `<p class="text-sm text-red-600">${esc(e.message)}</p>`; }
+}
+function vinMuestra(r, ctx){
+  const box = $(ctx === 'cap' ? '#vinBox' : ctx === 'vin2' ? '#vinOut2' : '#vinOut'); if (!box) return;
+  box.innerHTML = vinResultado(r, ctx);
+  if (ctx === 'cap'){ const f = $('#fcap'), v = r.veh || {}, set = (n, x) => { if (f.elements[n]) f.elements[n].value = x || ''; };
+    set('vMarca', v.marca); set('vModelo', v.modelo); set('vAnio', v.anio); set('vTipo', v.carroceria || CATV[v.cat]); }
+}
+function vinResultado(r, ctx){
+  const v = r.veh || {}, cap = ctx === 'cap';
+  const tit = r.decodificado ? [v.marca, v.modelo, v.anio].filter(Boolean).join(' ') || 'Vehículo' : 'No se pudo identificar el vehículo';
+  const det = r.decodificado && !r.manual ? [CATV[v.cat], v.carroceria, v.combustible, [v.desplazamiento && v.desplazamiento + ' L', v.cilindros && v.cilindros + ' cilindros'].filter(Boolean).join(' · '), v.pais && 'Planta: ' + v.pais].filter(Boolean) : (r.decodificado ? [CATV[v.cat]] : []);
+  const av = [r.aviso, r.dvOk === false ? 'El dígito verificador del VIN no coincide: revisa que esté bien escrito (en vehículos europeos o asiáticos puede ser normal).' : ''].filter(Boolean);
+  const sug = r.sugerencias || [];
+  return `<div class="card" style="background:#f8fafc;border:1px solid #e2e8f0"><div class="font-bold text-lg">${esc(tit)}</div>
+    ${det.length ? `<div class="flex flex-wrap gap-2 mt-1">${det.map(x => `<span class="chip" style="cursor:default">${esc(x)}</span>`).join('')}</div>` : ''}
+    ${r.vin ? `<div class="text-xs text-slate-500 mt-1">VIN ${esc(r.vin)}${r.paisVin ? ' · Región del VIN: ' + esc(r.paisVin) : ''}</div>` : ''}
+    ${av.map(a => `<p class="text-sm mt-2" style="color:#92400e">${esc(a)}</p>`).join('')}
+    ${r.decodificado ? `<h4 class="font-semibold mt-3">Arnés</h4>${sug.length ? sug.map((x, i) => `<div class="flex flex-wrap items-center justify-between gap-2 py-2" style="border-top:1px solid #e2e8f0"><div><div class="font-semibold">${i === 0 ? 'Sugerido: ' : ''}${esc(x.arnes)}</div><div class="text-xs text-slate-500">${x.fuente === 'regla' ? 'Regla' : 'Historial'} · ${esc(x.detalle)}</div></div>${cap ? `<button type="button" class="btn btns" data-a="usaArnes" data-v="${esc(x.arnes)}">Usar este arnés</button>` : ''}</div>`).join('')
+      : '<p class="text-sm text-slate-600">Todavía no hay una sugerencia para este vehículo. El sistema aprende solo: cuando termines una instalación de este modelo recordará el arnés que usaste. El coordinador también puede crear una regla en Configuración.</p>'}`
+      : (cap ? `<p class="text-sm mt-2">Captura la marca y el modelo a mano:</p>${manualBloque('cap')}` : '')}</div>`;
+}
+document.addEventListener('change', e => {
+  const el = e.target; if (el.name === 'vin' && el.closest('#fcap')){ const v = vinNorm(el.value); el.value = v; if (v.length === 17) vinConsulta(v, 'cap'); }
+});
 
 // ---------- Usuarios ----------
 function pintaUsers(){
@@ -614,9 +672,26 @@ function pintaConfig(){
     <div class="flex flex-wrap items-center gap-3 mt-3"><img src="/logo?${Date.now()}" onerror="this.style.display='none'" style="height:48px" alt="">
       <input id="c_logo" type="file" accept="image/png,image/jpeg" class="text-sm"><button class="btn btn2 btns" data-a="subeLogo">Subir logo</button><button class="btn btn2 btns" data-a="quitaLogo">Quitar logo</button></div>
     <p class="text-xs text-slate-500 mt-1">El logo es opcional. En cada formato eliges si se muestra o no en el PDF. Máximo 1 MB, PNG o JPG.</p></div>
+    <div id="reglasCard">${reglasCard()}</div>
     <div id="fmts">${cfgEdit.map(fmtCard).join('')}</div>
     <div class="flex flex-wrap gap-2 mt-2"><button class="btn btn2" data-a="addFmt">+ Nuevo formato</button><button class="btn" data-a="guardaCfg">Guardar configuración</button></div>`;
 }
+
+function reglasCard(){
+  const R = S.reglasEdit || [], ar = cfg.arneses || [];
+  const selArnes = (r, i) => ar.length ? `<select class="inp" data-rg="${i}" data-rp="arnes">${[...new Set([...ar, r.arnes].filter(Boolean))].map(a => `<option ${a === r.arnes ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>` : `<input class="inp" data-rg="${i}" data-rp="arnes" value="${esc(r.arnes)}">`;
+  return `<div class="card mb-4"><h2 class="font-bold text-lg">Reglas de arnés por vehículo</h2>
+    <p class="text-xs text-slate-500 mt-1">Dile al sistema qué arnés va con cada vehículo. Lo que dejes vacío significa "cualquiera" (sin año = cualquier año). Si aplican varias reglas, gana la más específica. Además el sistema aprende solo de las instalaciones que ya terminaste.</p>
+    ${R.length ? `<div class="wrap mt-2"><table><thead><tr><th>Marca</th><th>Modelo (contiene)</th><th>Año desde</th><th>Año hasta</th><th>Tipo de vehículo</th><th>Arnés</th><th>Nota</th><th></th></tr></thead><tbody>
+      ${R.map((r, i) => `<tr><td><input class="inp" data-rg="${i}" data-rp="marca" value="${esc(r.marca)}" placeholder="Ford"></td><td><input class="inp" data-rg="${i}" data-rp="modelo" value="${esc(r.modelo)}" placeholder="F-150"></td>
+        <td><input class="inp" style="width:84px" inputmode="numeric" data-rg="${i}" data-rp="desde" value="${esc(r.desde)}"></td><td><input class="inp" style="width:84px" inputmode="numeric" data-rg="${i}" data-rp="hasta" value="${esc(r.hasta)}"></td>
+        <td><select class="inp" data-rg="${i}" data-rp="cat"><option value="">Cualquiera</option>${Object.entries(CATV).map(([k, v]) => `<option value="${k}" ${r.cat === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
+        <td>${selArnes(r, i)}</td><td><input class="inp" data-rg="${i}" data-rp="nota" value="${esc(r.nota)}" placeholder="Opcional"></td>
+        <td><button class="btn btnr btns" data-a="delRegla" data-i="${i}">Quitar</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="text-sm text-slate-500 mt-2">Aún no hay reglas.</p>'}
+    <div class="flex flex-wrap gap-2 mt-3"><button class="btn btn2" data-a="addRegla">+ Agregar regla</button><button class="btn" data-a="guardaReglas">Guardar reglas</button></div></div>`;
+}
+document.addEventListener('input', e => { const el = e.target; if (el.dataset && el.dataset.rg !== undefined && S.reglasEdit) S.reglasEdit[+el.dataset.rg][el.dataset.rp] = el.value; });
+document.addEventListener('change', e => { const el = e.target; if (el.dataset && el.dataset.rg !== undefined && S.reglasEdit) S.reglasEdit[+el.dataset.rg][el.dataset.rp] = el.value; });
 function fmtCard(f, i){
   return `<div class="card mb-4"><div class="flex flex-wrap justify-between gap-2"><h3 class="font-semibold">Formato ${i + 1}</h3>
       <div class="flex gap-2"><button class="btn btn2 btns" data-a="dupFmt" data-i="${i}">Duplicar</button>${cfgEdit.length > 1 ? `<button class="btn btnr btns" data-a="delFmt" data-i="${i}">Eliminar</button>` : ''}</div></div>
@@ -653,6 +728,13 @@ async function subeLogo(btn){
 
 // ---------- Acciones (delegación de eventos) ----------
 const A = {
+  vinBusca: () => { const v = vinNorm($('#vinIn').value); if (v.length !== 17) return toast('El VIN debe tener 17 caracteres', 1); vinConsulta(v, 'vin'); },
+  vinCap: () => { const el = $('#fcap').elements.vin, v = vinNorm(el.value); el.value = v; if (v.length !== 17) return toast('Escribe primero el VIN completo (17 caracteres)', 1); vinConsulta(v, 'cap'); },
+  vinManual: (d) => vinManual(d.c),
+  usaArnes: d => { const sel = $('#fcap').elements.arnes; if (!sel) return; if (![...sel.options].some(o => o.value === d.v)) sel.add(new Option(d.v, d.v)); sel.value = d.v; toast('Arnés seleccionado: ' + d.v); },
+  addRegla: () => { S.reglasEdit.push({ marca:'', modelo:'', desde:'', hasta:'', cat:'', arnes:(cfg.arneses || [])[0] || '', nota:'' }); $('#reglasCard').innerHTML = reglasCard(); },
+  delRegla: d => { S.reglasEdit.splice(+d.i, 1); $('#reglasCard').innerHTML = reglasCard(); },
+  guardaReglas: async (d, e, b) => { b.disabled = true; try { const r = await api('/reglas-arnes', { method:'PUT', body:{ reglas:S.reglasEdit } }); S.reglas = r.reglas; S.reglasEdit = JSON.parse(JSON.stringify(r.reglas)); $('#reglasCard').innerHTML = reglasCard(); toast('Reglas guardadas'); } catch(err){ toast(err.message, 1); } b.disabled = false; },
   tab: d => irTab(d.t), salir, miPass: () => miPass(false), cerrar, cerrarBg: (d, e) => { if (e.target.classList.contains('modalbg')) cerrar(); },
   filtro: d => { filtro = d.f; pintaServ(); }, detalle: d => detalle(d.f), exportaServ,
   capturar: async d => { capFolio = d.f; await abrirSi(d.f); irTab('capturar'); },
