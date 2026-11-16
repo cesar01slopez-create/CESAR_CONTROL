@@ -83,7 +83,7 @@ function categoria(dias) {
 const CAMPOS_DEF = [
   { k: 'serie', label: 'Serie del dispositivo', on: true, req: true }, { k: 'imei', label: 'IMEI', on: true, req: true },
   { k: 'sim', label: 'Número de SIM asociado', on: true, req: false }, { k: 'economico', label: 'Número económico', on: true, req: false },
-  { k: 'placas', label: 'Placas', on: true, req: true },
+  { k: 'placas', label: 'Placas', on: true, req: true }, { k: 'vin', label: 'VIN (número de serie del vehículo)', on: true, req: false },
   ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => ({ k: 'extra' + n, label: 'Campo extra ' + n, on: false, req: false }))];
 function mezclaCampos(g) {
   const m = {}; (Array.isArray(g) ? g : []).forEach(c => { if (c && c.k) m[c.k] = c; });
@@ -110,7 +110,7 @@ function agenda(servicios, p, desde, hasta, now = Date.now(), conListos = false)
     .filter(x => x.t != null && (!r || (x.t >= r[0] && x.t < r[1]))).sort((a, b) => a.t - b.t).map(x => ({ ...x.s, ts: x.t }));
 }
 const norm = v => String(v ?? '').trim().toUpperCase().replace(/[\s-]+/g, '');   // "abc-123" = "ABC 123"
-const claveUnidad = s => norm(s.placas) || norm(s.imei) || norm(s.serie) || norm(s.economico) || '';
+const claveUnidad = s => norm(s.placas) || norm(s.imei) || norm(s.serie) || norm(s.economico) || norm(s.vin) || '';
 function unidades(servicios, q = '') {
   const g = {};
   servicios.forEach(s => { const k = claveUnidad(s); if (k) (g[k] = g[k] || []).push(s); });
@@ -118,10 +118,10 @@ function unidades(servicios, q = '') {
   return Object.entries(g).map(([clave, l]) => {
     l.sort((a, b) => (visitaTs(b) || 0) - (visitaTs(a) || 0));
     const pick = k => (l.find(x => x[k]) || {})[k] || '';
-    return { clave, placas: pick('placas'), economico: pick('economico'), imei: pick('imei'), serie: pick('serie'), sim: pick('sim'), cliente: l[0].cliente || '',
+    return { clave, placas: pick('placas'), economico: pick('economico'), imei: pick('imei'), serie: pick('serie'), sim: pick('sim'), vin: pick('vin'), vehiculo: [pick('vMarca'), pick('vModelo'), pick('vAnio')].filter(Boolean).join(' '), arnes: pick('arnes'), cliente: l[0].cliente || '',
       total: l.length, ultima: visitaTs(l[0]),
       servicios: l.map(s => ({ folio: s.folio, fecha: s.fecha, hora: s.hora, motivo: s.motivo, tecnico: s.tecnico, cliente: s.cliente, estatus: s.estatus, urlDoc: s.urlDoc || '' })) };
-  }).filter(u => !nq || [u.placas, u.economico, u.imei, u.serie, u.sim].some(v => norm(v).includes(nq)) || u.cliente.toLowerCase().includes(qq))
+  }).filter(u => !nq || [u.placas, u.economico, u.imei, u.serie, u.sim, u.vin].some(v => norm(v).includes(nq)) || u.cliente.toLowerCase().includes(qq))
     .sort((a, b) => (b.ultima || 0) - (a.ultima || 0));
 }
 function waLink(tel, texto) {
@@ -130,4 +130,64 @@ function waLink(tel, texto) {
   return 'https://wa.me/' + d + '?text=' + encodeURIComponent(texto);
 }
 
-module.exports = { CAMPOS_DEF, mezclaCampos, normFormatos, agenda, unidades, claveUnidad, waLink, MOTIVOS, ELEC, CATEGORIAS, visitaTs, rango, minutos, fmtMin, stats, kpi, turno, categoria, local };
+
+// ---------- VIN: validación, decodificación y sugerencia de arnés ----------
+const vinNormal = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const vinFormato = v => /^[A-HJ-NPR-Z0-9]{17}$/.test(v);
+const VIN_T = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, J: 1, K: 2, L: 3, M: 4, N: 5, P: 7, R: 9, S: 2, T: 3, U: 4, V: 5, W: 6, X: 7, Y: 8, Z: 9 };
+function vinCheck(v) {   // dígito verificador (posición 9); obligatorio en norteamérica, no en otras regiones
+  if (!vinFormato(v)) return false; const W = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+  const sum = [...v].reduce((a, c, i) => a + (/\d/.test(c) ? +c : VIN_T[c]) * W[i], 0), d = sum % 11 === 10 ? 'X' : String(sum % 11);
+  return v[8] === d;
+}
+function vinAnio(v, hoy = new Date().getFullYear()) {
+  const i = 'ABCDEFGHJKLMNPRSTVWXY123456789'.indexOf(String(v || '')[9]); if (i < 0) return null;
+  return 2010 + i <= hoy + 1 ? 2010 + i : 1980 + i;
+}
+const VIN_PAIS = { '1': 'Estados Unidos', '4': 'Estados Unidos', '5': 'Estados Unidos', '2': 'Canadá', '3': 'México', J: 'Japón', K: 'Corea del Sur', L: 'China', S: 'Reino Unido', V: 'Francia / España', W: 'Alemania', Z: 'Italia', Y: 'Suecia / Finlandia', '9': 'Brasil', '8': 'Argentina / Chile', M: 'India / Tailandia / Indonesia', T: 'Suiza / Rep. Checa', R: 'Taiwán' };
+const vinPais = v => VIN_PAIS[String(v || '')[0]] || '';
+const sinAc = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const CAT_VEH = { ligero: 'Auto, SUV o pickup', van: 'Van / camioneta de carga', pesado: 'Camión pesado / tractocamión', autobus: 'Autobús', moto: 'Motocicleta', remolque: 'Remolque', otro: 'Otro' };
+function categoriaVeh(v) {
+  const tipo = String(v.tipo || '').toUpperCase(), car = String(v.carroceria || '').toLowerCase(), cl = (String(v.gvwr || '').match(/Class\s*(\d)/i) || [])[1];
+  if (tipo.includes('BUS')) return 'autobus'; if (tipo.includes('MOTORCYCLE')) return 'moto'; if (tipo.includes('TRAILER')) return 'remolque';
+  if (/tractor/.test(car) || (cl && +cl >= 4)) return 'pesado';
+  if (/van/.test(car)) return 'van';
+  return 'ligero';
+}
+const titulo = s => s.length > 3 ? s.toLowerCase().replace(/(^|[\s-])([a-zñáéíóú])/g, (m, a, b) => a + b.toUpperCase()) : s;
+function parseVpic(j) {   // respuesta de NHTSA vPIC (DecodeVinValues) → datos del vehículo
+  const r = (j && Array.isArray(j.Results) && j.Results[0]) || {}, g = k => String(r[k] == null ? '' : r[k]).trim();
+  const carrocerias = [['Pickup', 'Pickup'], ['Sport Utility', 'SUV'], ['Sedan', 'Sedán'], ['Hatchback', 'Hatchback'], ['Cargo Van', 'Van de carga'], ['Minivan', 'Minivan'], ['Van', 'Van'], ['Truck-Tractor', 'Tractocamión'], ['Chassis', 'Chasis cabina'], ['Bus', 'Autobús'], ['Wagon', 'Station wagon'], ['Coupe', 'Coupé'], ['Convertible', 'Convertible'], ['Crossover', 'Crossover']];
+  const bc = g('BodyClass'), carroceria = (carrocerias.find(([k]) => bc.toLowerCase().includes(k.toLowerCase())) || [0, bc])[1];
+  const v = { marca: titulo(g('Make')), modelo: g('Model'), anio: parseInt(g('ModelYear'), 10) || null, carroceria, carroceriaOriginal: bc, tipo: g('VehicleType'),
+    combustible: g('FuelTypePrimary'), cilindros: g('EngineCylinders'), desplazamiento: g('DisplacementL'), pais: g('PlantCountry'), gvwr: g('GVWR'), version: g('Trim'), codigoError: g('ErrorCode') };
+  v.cat = categoriaVeh(v); return v;
+}
+// Reglas: { marca, modelo, desde, hasta, cat, arnes, nota }. Vacío = cualquiera. Gana la más específica.
+function reglasValidas(a) {
+  return (Array.isArray(a) ? a : []).slice(0, 300).map(r => ({ marca: String((r && r.marca) || '').trim().slice(0, 40), modelo: String((r && r.modelo) || '').trim().slice(0, 40),
+    desde: parseInt(r && r.desde, 10) || '', hasta: parseInt(r && r.hasta, 10) || '', cat: CAT_VEH[r && r.cat] ? r.cat : '', arnes: String((r && r.arnes) || '').trim().slice(0, 80), nota: String((r && r.nota) || '').trim().slice(0, 160) })).filter(r => r.arnes);
+}
+function sugiereArnes(veh, reglas, servicios) {
+  const marca = sinAc(veh.marca), modelo = sinAc(veh.modelo), anio = +veh.anio || null, cat = veh.cat || categoriaVeh(veh), out = [], vistos = new Set();
+  const add = x => { if (!vistos.has(x.arnes)) { vistos.add(x.arnes); out.push(x); } };
+  const cand = [];
+  reglasValidas(reglas).forEach((r, i) => {
+    const rm = sinAc(r.marca), rmo = sinAc(r.modelo);
+    if (rm && rm !== '*' && !marca.includes(rm)) return; if (rmo && !modelo.includes(rmo)) return;
+    if (r.desde && (!anio || anio < r.desde)) return; if (r.hasta && (!anio || anio > r.hasta)) return; if (r.cat && r.cat !== cat) return;
+    if (!rm && !rmo && !r.cat && !r.desde && !r.hasta) return;   // una regla totalmente vacía no sugiere nada
+    cand.push({ sc: (rmo ? 4 : 0) + (rm && rm !== '*' ? 2 : 0) + (r.desde || r.hasta ? 2 : 0) + (r.cat ? 1 : 0), i, r });
+  });
+  cand.sort((a, b) => b.sc - a.sc || a.i - b.i).forEach(c => add({ arnes: c.r.arnes, fuente: 'regla', detalle: c.r.nota || 'Regla configurada por el coordinador' }));
+  if (marca && modelo) {
+    let h = (servicios || []).filter(s => s.estatus === 'Completado' && s.arnes && sinAc(s.vMarca) === marca && sinAc(s.vModelo) === modelo);
+    const cerca = anio ? h.filter(s => s.vAnio && Math.abs(+s.vAnio - anio) <= 2) : []; if (cerca.length) h = cerca;
+    const n = {}; h.forEach(s => { n[s.arnes] = (n[s.arnes] || 0) + 1; });
+    Object.entries(n).sort((a, b) => b[1] - a[1]).forEach(([arnes, k]) => add({ arnes, fuente: 'historial', n: k, total: h.length, detalle: `Usado en ${k} de ${h.length} instalación${h.length === 1 ? '' : 'es'} de ${veh.marca} ${veh.modelo}` }));
+  }
+  return out.slice(0, 4);
+}
+
+module.exports = { vinNormal, vinFormato, vinCheck, vinAnio, vinPais, categoriaVeh, CAT_VEH, parseVpic, reglasValidas, sugiereArnes, sinAc, CAMPOS_DEF, mezclaCampos, normFormatos, agenda, unidades, claveUnidad, waLink, MOTIVOS, ELEC, CATEGORIAS, visitaTs, rango, minutos, fmtMin, stats, kpi, turno, categoria, local };

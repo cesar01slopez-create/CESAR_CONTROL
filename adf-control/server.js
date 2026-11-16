@@ -128,7 +128,7 @@ app.get('/logo', async (req, res) => {
 app.get('/firmar/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'firmar.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/version', (req, res) => res.json({ version: '5.0', app: conf().nombre }));
+app.get('/api/version', (req, res) => res.json({ version: '5.1', app: conf().nombre }));
 const geotabCfg = () => process.env.GEOTAB_DATABASE && process.env.GEOTAB_USER && process.env.GEOTAB_PASSWORD
   ? { server: process.env.GEOTAB_SERVER, database: limpia(process.env.GEOTAB_DATABASE), user: limpia(process.env.GEOTAB_USER), password: limpia(process.env.GEOTAB_PASSWORD) } : null;
 app.get('/api/config', (req, res) => { const c = conf(); ok(res, { ...c, motivos: L.MOTIVOS, elecItems: L.ELEC, categorias: L.CATEGORIAS, geotab: !!geotabCfg() }); });
@@ -277,6 +277,40 @@ app.get('/api/agenda', auth, (req, res) => {
 });
 app.get('/api/unidades', auth, (req, res) => ok(res, { unidades: L.unidades(visibles(req.u), t(req.query.q)).slice(0, 60) }));
 
+
+// ---------- Decodificador de VIN y sugerencia de arnés ----------
+// Fuente: base pública de NHTSA (vPIC). Cubre muy bien los vehículos de mercado norteamericano; algunos modelos solo vendidos en México pueden salir incompletos.
+const vinCache = new Map();
+async function decodificaVin(vin) {
+  const c = vinCache.get(vin); if (c && Date.now() - c.t < 30 * 864e5) return c.veh;
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 9000);
+  try {
+    const r = await fetch('https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/' + encodeURIComponent(vin) + '?format=json', { signal: ctl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const veh = L.parseVpic(await r.json()); if (veh.marca) { if (vinCache.size > 2000) vinCache.clear(); vinCache.set(vin, { t: Date.now(), veh }); } return veh;
+  } finally { clearTimeout(tm); }
+}
+const reglasArnes = () => L.reglasValidas((db.config || {}).reglasArnes);
+app.get('/api/vin/:vin', auth, rol('coord', 'tec', 'soporte'), async (req, res) => {
+  const vin = L.vinNormal(req.params.vin);
+  if (!L.vinFormato(vin)) return bad(res, 400, 'El VIN debe tener 17 caracteres (letras y números; no lleva I, O ni Q)');
+  let veh = null, aviso = '';
+  try { veh = await decodificaVin(vin); } catch (e) { aviso = 'No se pudo consultar la base de VIN en este momento. Captura la marca y el modelo a mano.'; }
+  const ok2 = !!(veh && veh.marca);
+  if (veh && !ok2) aviso = 'Este VIN no aparece en la base pública (pasa en vehículos vendidos solo en México). Captura la marca y el modelo a mano para obtener la sugerencia.';
+  const v = ok2 ? veh : { marca: '', modelo: '', anio: L.vinAnio(vin), cat: 'ligero' };
+  ok(res, { vin, veh: v, decodificado: ok2, dvOk: L.vinCheck(vin), paisVin: L.vinPais(vin), aviso, sugerencias: ok2 ? L.sugiereArnes(v, reglasArnes(), db.servicios) : [] });
+});
+app.post('/api/arnes/sugerir', auth, rol('coord', 'tec', 'soporte'), (req, res) => {
+  const b = req.body || {}, v = { marca: t(b.marca).slice(0, 40), modelo: t(b.modelo).slice(0, 40), anio: parseInt(b.anio, 10) || null, cat: L.CAT_VEH[b.cat] ? b.cat : 'ligero' };
+  if (!v.marca && !v.modelo && !b.cat) return bad(res, 400, 'Escribe al menos la marca o el modelo');
+  ok(res, { veh: v, sugerencias: L.sugiereArnes(v, reglasArnes(), db.servicios) });
+});
+app.get('/api/reglas-arnes', auth, rol('coord'), (req, res) => ok(res, { reglas: reglasArnes(), categorias: L.CAT_VEH }));
+app.put('/api/reglas-arnes', auth, rol('coord'), (req, res) => {
+  db.config = db.config || {}; db.config.reglasArnes = L.reglasValidas(req.body.reglas); save(); ok(res, { reglas: db.config.reglasArnes });
+});
+
 // ---------- KPI ----------
 app.get('/api/kpi', auth, rol('coord', 'soporte'), (req, res) => ok(res, L.kpi(db.servicios, t(req.query.periodo), t(req.query.desde), t(req.query.hasta))));
 
@@ -395,6 +429,7 @@ function renderODS(d, s, files, b, C, logo, F) {
   band(d, 'EQUIPO INSTALADO');
   const campos = F.campos.filter(c => c.on);
   for (let i = 0; i < campos.length; i += 2) row(d, campos.slice(i, i + 2).map(c => [c.label, s[c.k]]));
+  if (s.vMarca || s.vModelo) row(d, [['Vehículo', [s.vMarca, s.vModelo, s.vAnio].filter(Boolean).join(' ') + (s.vTipo ? ' · ' + s.vTipo : '')]]);
   if (s.arnes) row(d, [['Arnés utilizado', s.arnes]]);
   row(d, [['Comentario del técnico', s.comentario]]);
   tablaElec(d, s);
@@ -471,6 +506,8 @@ app.post('/api/generar-ods', auth, rol('tec', 'coord'), up.any(), async (req, re
     s.formato = F.id;
     F.campos.forEach(c => { if (c.on) s[c.k] = c.k === 'placas' ? t(b[c.k]).toUpperCase() : t(b[c.k]); });
     s.arnes = t(b.arnes).slice(0, 80); s.comentario = t(b.comentarioTecnico);
+    if (s.vin) s.vin = L.vinNormal(s.vin).slice(0, 17);
+    s.vMarca = t(b.vMarca).slice(0, 40); s.vModelo = t(b.vModelo).slice(0, 40); s.vAnio = parseInt(b.vAnio, 10) || ''; s.vTipo = t(b.vTipo).slice(0, 60);
     if (F.elec) { const e = {}; ELEC.forEach((it, i) => { const v = t(b['elec_' + i]); if (['Sí', 'No', 'N/A'].includes(v)) e[it] = v; }); s.elec = e; s.obsElec = t(b.obsElec); }
     else { delete s.elec; delete s.obsElec; }
     s.terminadoEn = Date.now();
@@ -556,11 +593,11 @@ async function sembrarDemo() {
     lugar: 'Patio principal', recibe: 'Jorge Martínez', contacto: '5598765432', ciudad: 'Monterrey', edo: 'Nuevo León', ...extra });
   const ts = (off, hh) => new Date(hoy + off * DIA).setUTCHours(hh + 6, 0, 0, 0);
   const elec = {}; ELEC.forEach(it => { elec[it] = 'Sí'; });
-  const eq = (n, p) => ({ serie: 'G9' + n + '0045A', imei: '86400000000' + n + '000', sim: '8952140000000' + n + '00', economico: 'ECO-' + p, placas: 'DEM-' + p + '1' });
+  const eq = (n, p) => ({ serie: 'G9' + n + '0045A', imei: '86400000000' + n + '000', sim: '8952140000000' + n + '00', economico: 'ECO-' + p, placas: 'DEM-' + p + '1', vin: '1FTFW1ET5DFC10312', vMarca: 'Ford', vModelo: 'F-150', vAnio: 2013, vTipo: 'Pickup' });
   const hechas = [
     base('DEMO-001', -5, '09:00', 'Instalación', C1, { ...eq(1, '101'), arnes: 'Arnés en Y para OBD', comentario: 'Instalación sin novedades. Equipo reportando en plataforma.', elec, obsElec: 'Sin observaciones', abiertoEn: ts(-5, 9), terminadoEn: ts(-5, 9) + 55 * 60e3 }),
-    base('DEMO-002', -2, '11:00', 'Revisión', C1, { ...eq(2, '102'), arnes: 'Sin arnés (conexión directa al OBD)', comentario: 'Se revisó cableado y se reubicó el equipo.', abiertoEn: ts(-2, 11), terminadoEn: ts(-2, 11) + 40 * 60e3 }),
-    base('DEMO-008', -1, '10:00', 'Instalación', C2, { ...eq(3, '201'), arnes: 'Arnés de alimentación directa a batería', comentario: 'Instalación completada.', abiertoEn: ts(-1, 10), terminadoEn: ts(-1, 10) + 70 * 60e3 })
+    base('DEMO-002', -2, '11:00', 'Revisión', C1, { ...eq(2, '102'), arnes: 'Arnés en Y para OBD', comentario: 'Se revisó cableado y se reubicó el equipo.', abiertoEn: ts(-2, 11), terminadoEn: ts(-2, 11) + 40 * 60e3 }),
+    base('DEMO-008', -1, '10:00', 'Instalación', C2, { ...eq(3, '201'), arnes: 'Arnés en Y para OBD', comentario: 'Instalación completada.', abiertoEn: ts(-1, 10), terminadoEn: ts(-1, 10) + 70 * 60e3 })
   ];
   for (const s of hechas) { await cierraConPdf(s, {}, { nombreCliente: 'Jorge Martínez' }); s.completadoEn = s.terminadoEn; db.servicios.push(s); }
   db.servicios.push(
