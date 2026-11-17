@@ -190,4 +190,42 @@ function sugiereArnes(veh, reglas, servicios) {
   return out.slice(0, 4);
 }
 
-module.exports = { vinNormal, vinFormato, vinCheck, vinAnio, vinPais, categoriaVeh, CAT_VEH, parseVpic, reglasValidas, sugiereArnes, sinAc, CAMPOS_DEF, mezclaCampos, normFormatos, agenda, unidades, claveUnidad, waLink, MOTIVOS, ELEC, CATEGORIAS, visitaTs, rango, minutos, fmtMin, stats, kpi, turno, categoria, local };
+// ---------- Guía general de arneses Geotab (GO9) ----------
+// Basada en la documentación pública de Geotab (Harness Identification and Application / Harness Assessment Cheat Sheet).
+// Es orientativa: Geotab no garantiza compatibilidad; la herramienta oficial es https://www.geotab.com/harness-lookup/
+const ARNESES_GEOTAB = {
+  directo: 'Sin arnés · GO9 directo al puerto OBD-II',
+  bs16: 'HRN-BS16S4 · Arnés recto OBD-II 16 pines',
+  gs16: 'HRN-GS16K2-LD · T-harness universal OBD-II (ligeros)',
+  gs09: 'HRN-GS09K2-A · T-harness universal 9 pines Deutsch (pesados)',
+  ds06: 'HRN-DS06T2-A · T-harness 6 pines Deutsch (pesados antiguos)',
+  cg13: 'HRN-CG13S1-A · Adaptador pesado para puerto OBD-II 16 pines',
+  rp1226: 'HRN-CS14S21 · Arnés puerto RP1226 (pesados 2019+)',
+  isuzu: 'HRN-CM24Y1 · Isuzu serie N diésel 2017+ (con HRN-CI04A2)',
+  sinpuerto: 'HRN-CW03K3 · Vehículo sin puerto de diagnóstico'
+};
+function guiaGeotab(v) {
+  const cat = v.cat || categoriaVeh(v), anio = +v.anio || null, marca = sinAc(v.marca), out = [], add = (k, d) => out.push({ arnes: ARNESES_GEOTAB[k], fuente: 'geotab', detalle: d });
+  if (!marca && !v.modelo && !v.cat) return [];
+  if (['moto', 'remolque', 'otro'].includes(cat)) return [];
+  if (anio && anio < 1996) { add('sinpuerto', 'Los vehículos anteriores a 1996 normalmente no tienen puerto de diagnóstico.'); return out; }
+  if (marca.includes('isuzu') && /diesel/i.test(v.combustible || '') && anio >= 2017 && /^(n[pqr]r|n\b|n[- ]?series)/i.test(sinAc(v.modelo))) add('isuzu', 'Confirma que sea serie N con código RPO I4H antes de usarlo.');
+  if (cat === 'ligero' || cat === 'van') {
+    add('directo', 'Vehículos ligeros (12 V) desde 1997: el GO9 se conecta directo al puerto OBD-II de 16 pines.');
+    add('bs16', 'Si quieres sacar el equipo del paso del conductor.');
+    add('gs16', 'Si quieres dejar libre el puerto OBD-II.');
+  } else {
+    if (anio >= 2019) add('rp1226', 'Pesados 2019+: no uses el puerto OBD-II; usa el arnés específico (RP1226) cuando el vehículo lo tenga.');
+    add('gs09', 'Conector Deutsch de 9 pines (el más común en pesados). Confirma el tipo de puerto antes de instalar.');
+    add('ds06', 'Si el puerto de diagnóstico es de 6 pines (pesados antiguos).');
+    add('cg13', 'Si solo hay puerto OBD-II de 16 pines en un pesado (24 V): úsalo con el arnés universal para no dañar el equipo.');
+  }
+  return out;
+}
+function avisosGeotab(v) {
+  const a = ['Guía orientativa: Geotab no garantiza la compatibilidad. Si Geotab ofrece un arnés específico para el vehículo, úsalo siempre y confirma en su herramienta oficial.'];
+  if (/^electric$/i.test(String(v.combustible || '').trim())) a.push('Vehículo eléctrico: Geotab suele pedir un arnés específico por modelo y año. Verifica en la herramienta oficial antes de instalar.');
+  return a;
+}
+
+module.exports = { ARNESES_GEOTAB, guiaGeotab, avisosGeotab, vinNormal, vinFormato, vinCheck, vinAnio, vinPais, categoriaVeh, CAT_VEH, parseVpic, reglasValidas, sugiereArnes, sinAc, CAMPOS_DEF, mezclaCampos, normFormatos, agenda, unidades, claveUnidad, waLink, MOTIVOS, ELEC, CATEGORIAS, visitaTs, rango, minutos, fmtMin, stats, kpi, turno, categoria, local };
