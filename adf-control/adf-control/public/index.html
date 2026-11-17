@@ -215,7 +215,7 @@ async function irTab(t){
     if (['usuarios','nuevo','agenda','config'].includes(t) && me.rol === 'coord') await cargaUsuarios();
 
   } catch(e){ toast(e.message, 1); }
-  if (t === 'config' && me.rol === 'coord'){ try { S.reglas = (await api('/reglas-arnes')).reglas; S.reglasEdit = JSON.parse(JSON.stringify(S.reglas)); } catch(e){ S.reglasEdit = []; toast(e.message, 1); } }
+  if (t === 'config' && me.rol === 'coord'){ try { const rr = await api('/reglas-arnes'); S.geotabArn = rr.geotab; S.reglas = rr.reglas; S.reglasEdit = JSON.parse(JSON.stringify(S.reglas)); } catch(e){ S.reglasEdit = []; toast(e.message, 1); } }
   P[t]();
 }
 
@@ -560,8 +560,10 @@ function vinResultado(r, ctx){
     ${det.length ? `<div class="flex flex-wrap gap-2 mt-1">${det.map(x => `<span class="chip" style="cursor:default">${esc(x)}</span>`).join('')}</div>` : ''}
     ${r.vin ? `<div class="text-xs text-slate-500 mt-1">VIN ${esc(r.vin)}${r.paisVin ? ' · Región del VIN: ' + esc(r.paisVin) : ''}</div>` : ''}
     ${av.map(a => `<p class="text-sm mt-2" style="color:#92400e">${esc(a)}</p>`).join('')}
-    ${r.decodificado ? `<h4 class="font-semibold mt-3">Arnés</h4>${sug.length ? sug.map((x, i) => `<div class="flex flex-wrap items-center justify-between gap-2 py-2" style="border-top:1px solid #e2e8f0"><div><div class="font-semibold">${i === 0 ? 'Sugerido: ' : ''}${esc(x.arnes)}</div><div class="text-xs text-slate-500">${x.fuente === 'regla' ? 'Regla' : 'Historial'} · ${esc(x.detalle)}</div></div>${cap ? `<button type="button" class="btn btns" data-a="usaArnes" data-v="${esc(x.arnes)}">Usar este arnés</button>` : ''}</div>`).join('')
-      : '<p class="text-sm text-slate-600">Todavía no hay una sugerencia para este vehículo. El sistema aprende solo: cuando termines una instalación de este modelo recordará el arnés que usaste. El coordinador también puede crear una regla en Configuración.</p>'}`
+    ${r.decodificado ? `<h4 class="font-semibold mt-3">Arnés</h4>${sug.length ? sug.map((x, i) => `<div class="flex flex-wrap items-center justify-between gap-2 py-2" style="border-top:1px solid #e2e8f0"><div><div class="font-semibold">${i === 0 ? 'Sugerido: ' : ''}${esc(x.arnes)}</div><div class="text-xs text-slate-500">${x.fuente === 'regla' ? 'Regla' : x.fuente === 'geotab' ? 'Guía Geotab' : 'Historial'} · ${esc(x.detalle)}</div></div>${cap ? `<button type="button" class="btn btns" data-a="usaArnes" data-v="${esc(x.arnes)}">Usar este arnés</button>` : ''}</div>`).join('')
+      : '<p class="text-sm text-slate-600">Todavía no hay una sugerencia para este vehículo. El sistema aprende solo: cuando termines una instalación de este modelo recordará el arnés que usaste. El coordinador también puede crear una regla en Configuración.</p>'}
+      ${(r.avisosGeotab || []).map((a, i) => `<p class="text-xs mt-2" style="color:${i ? '#92400e' : '#64748b'}">${esc(a)}</p>`).join('')}
+      <a class="btn btn2 btns mt-2" style="display:inline-block;text-decoration:none" href="https://www.geotab.com/harness-lookup/" target="_blank" rel="noopener">Verificar en Geotab Harness Lookup</a>`
       : (cap ? `<p class="text-sm mt-2">Captura la marca y el modelo a mano:</p>${manualBloque('cap')}` : '')}</div>`;
 }
 document.addEventListener('change', e => {
@@ -668,7 +670,7 @@ function pintaConfig(){
       <div><label class="l">Color principal</label><input id="c_color" type="color" class="inp" style="height:42px;padding:3px" value="${esc(X.color)}"></div>
     </div>
     <label class="l">Texto al pie de cada ODS (opcional: teléfonos, avisos)</label><textarea id="c_nota" class="inp" rows="2">${esc(X.nota)}</textarea>
-    <label class="l">Arneses disponibles (uno por línea; aparecen como lista en la captura. Déjalo vacío para no pedir arnés)</label><textarea id="c_arn" class="inp" rows="5">${esc(Array.isArray(X.arneses) ? X.arneses.join('\n') : (X.arneses || ''))}</textarea>
+    <label class="l">Arneses disponibles (uno por línea; aparecen como lista en la captura. Déjalo vacío para no pedir arnés)</label><div class="mb-1"><button type="button" class="btn btn2 btns" data-a="addGeotab">Agregar los arneses Geotab más comunes</button></div><textarea id="c_arn" class="inp" rows="5">${esc(Array.isArray(X.arneses) ? X.arneses.join('\n') : (X.arneses || ''))}</textarea>
     <div class="flex flex-wrap items-center gap-3 mt-3"><img src="/logo?${Date.now()}" onerror="this.style.display='none'" style="height:48px" alt="">
       <input id="c_logo" type="file" accept="image/png,image/jpeg" class="text-sm"><button class="btn btn2 btns" data-a="subeLogo">Subir logo</button><button class="btn btn2 btns" data-a="quitaLogo">Quitar logo</button></div>
     <p class="text-xs text-slate-500 mt-1">El logo es opcional. En cada formato eliges si se muestra o no en el PDF. Máximo 1 MB, PNG o JPG.</p></div>
@@ -731,6 +733,7 @@ const A = {
   vinBusca: () => { const v = vinNorm($('#vinIn').value); if (v.length !== 17) return toast('El VIN debe tener 17 caracteres', 1); vinConsulta(v, 'vin'); },
   vinCap: () => { const el = $('#fcap').elements.vin, v = vinNorm(el.value); el.value = v; if (v.length !== 17) return toast('Escribe primero el VIN completo (17 caracteres)', 1); vinConsulta(v, 'cap'); },
   vinManual: (d) => vinManual(d.c),
+  addGeotab: () => { const ta = $('#c_arn'), act = ta.value.split('\n').map(x => x.trim()).filter(Boolean), nuevos = (S.geotabArn || []).filter(x => !act.includes(x)); ta.value = act.concat(nuevos).join('\n'); toast(nuevos.length ? 'Se agregaron ' + nuevos.length + ' arneses. Presiona Guardar configuración.' : 'Ya los tienes todos'); },
   usaArnes: d => { const sel = $('#fcap').elements.arnes; if (!sel) return; if (![...sel.options].some(o => o.value === d.v)) sel.add(new Option(d.v, d.v)); sel.value = d.v; toast('Arnés seleccionado: ' + d.v); },
   addRegla: () => { S.reglasEdit.push({ marca:'', modelo:'', desde:'', hasta:'', cat:'', arnes:(cfg.arneses || [])[0] || '', nota:'' }); $('#reglasCard').innerHTML = reglasCard(); },
   delRegla: d => { S.reglasEdit.splice(+d.i, 1); $('#reglasCard').innerHTML = reglasCard(); },
