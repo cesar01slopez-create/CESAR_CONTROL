@@ -128,7 +128,7 @@ app.get('/logo', async (req, res) => {
 app.get('/firmar/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'firmar.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/version', (req, res) => res.json({ version: '5.1', app: conf().nombre }));
+app.get('/api/version', (req, res) => res.json({ version: '5.2', app: conf().nombre }));
 const geotabCfg = () => process.env.GEOTAB_DATABASE && process.env.GEOTAB_USER && process.env.GEOTAB_PASSWORD
   ? { server: process.env.GEOTAB_SERVER, database: limpia(process.env.GEOTAB_DATABASE), user: limpia(process.env.GEOTAB_USER), password: limpia(process.env.GEOTAB_PASSWORD) } : null;
 app.get('/api/config', (req, res) => { const c = conf(); ok(res, { ...c, motivos: L.MOTIVOS, elecItems: L.ELEC, categorias: L.CATEGORIAS, geotab: !!geotabCfg() }); });
@@ -291,6 +291,7 @@ async function decodificaVin(vin) {
   } finally { clearTimeout(tm); }
 }
 const reglasArnes = () => L.reglasValidas((db.config || {}).reglasArnes);
+const sugerenciasPara = v => [...L.sugiereArnes(v, reglasArnes(), db.servicios), ...L.guiaGeotab(v)];
 app.get('/api/vin/:vin', auth, rol('coord', 'tec', 'soporte'), async (req, res) => {
   const vin = L.vinNormal(req.params.vin);
   if (!L.vinFormato(vin)) return bad(res, 400, 'El VIN debe tener 17 caracteres (letras y números; no lleva I, O ni Q)');
@@ -299,14 +300,14 @@ app.get('/api/vin/:vin', auth, rol('coord', 'tec', 'soporte'), async (req, res) 
   const ok2 = !!(veh && veh.marca);
   if (veh && !ok2) aviso = 'Este VIN no aparece en la base pública (pasa en vehículos vendidos solo en México). Captura la marca y el modelo a mano para obtener la sugerencia.';
   const v = ok2 ? veh : { marca: '', modelo: '', anio: L.vinAnio(vin), cat: 'ligero' };
-  ok(res, { vin, veh: v, decodificado: ok2, dvOk: L.vinCheck(vin), paisVin: L.vinPais(vin), aviso, sugerencias: ok2 ? L.sugiereArnes(v, reglasArnes(), db.servicios) : [] });
+  ok(res, { vin, veh: v, decodificado: ok2, dvOk: L.vinCheck(vin), paisVin: L.vinPais(vin), aviso, sugerencias: ok2 ? sugerenciasPara(v) : [], avisosGeotab: ok2 ? L.avisosGeotab(v) : [] });
 });
 app.post('/api/arnes/sugerir', auth, rol('coord', 'tec', 'soporte'), (req, res) => {
   const b = req.body || {}, v = { marca: t(b.marca).slice(0, 40), modelo: t(b.modelo).slice(0, 40), anio: parseInt(b.anio, 10) || null, cat: L.CAT_VEH[b.cat] ? b.cat : 'ligero' };
   if (!v.marca && !v.modelo && !b.cat) return bad(res, 400, 'Escribe al menos la marca o el modelo');
-  ok(res, { veh: v, sugerencias: L.sugiereArnes(v, reglasArnes(), db.servicios) });
+  ok(res, { veh: v, sugerencias: sugerenciasPara(v), avisosGeotab: L.avisosGeotab(v) });
 });
-app.get('/api/reglas-arnes', auth, rol('coord'), (req, res) => ok(res, { reglas: reglasArnes(), categorias: L.CAT_VEH }));
+app.get('/api/reglas-arnes', auth, rol('coord'), (req, res) => ok(res, { reglas: reglasArnes(), categorias: L.CAT_VEH, geotab: Object.values(L.ARNESES_GEOTAB) }));
 app.put('/api/reglas-arnes', auth, rol('coord'), (req, res) => {
   db.config = db.config || {}; db.config.reglasArnes = L.reglasValidas(req.body.reglas); save(); ok(res, { reglas: db.config.reglasArnes });
 });
