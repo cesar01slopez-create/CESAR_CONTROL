@@ -675,7 +675,3 @@ cargar().then(async () => {
   sembrar(); await sembrarDemo();
   app.listen(PORT, () => console.log(conf().nombre + ' en puerto ' + PORT + (USE_PG ? ' (datos en base de datos externa)' : ' (datos en archivo local)') + (geotabCfg() ? ' · Geotab configurado' : '')));
 }).catch(e => { console.error('No se pudo iniciar:', e.message); process.exit(1); });
-cargar().then(async () => {
-  sembrar(); await sembrarDemo();
-  app.listen(PORT, () => console.log(conf().nombre + ' en puerto ' + PORT + (USE_PG ? ' (datos en base de datos externa)' : ' (datos en archivo local)') + (geotabCfg() ? ' · Geotab configurado' : '')));
-}).catch(e => { console.error('No se pudo iniciar:', e.message); process.exit(1); });
