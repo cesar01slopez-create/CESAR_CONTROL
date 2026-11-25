@@ -146,7 +146,7 @@ function waLink(tel, texto){
   let d = m[0].replace(/\D/g, ''); if (d.length === 10) d = '52' + d; if (d.length < 11) return '';
   return 'https://wa.me/' + d + '?text=' + encodeURIComponent(texto);
 }
-const fmtDe = s => cfg.formatos.find(f => f.id === (s && s.formato)) || cfg.formatos[0] || { campos:[], titulo:'', elec:false, fotos:true };
+const fmtDe = s => cfg.formatos.find(f => f.id === (s && s.formato)) || cfg.formatos[0] || { campos:[], titulo:'', elec:false, fotos:true, check:true };
 const diaLbl = ts => { const d = new Date(ts - 6*3600e3); return `${ANCHO[d.getUTCDay()]} ${d.getUTCDate()} ${MESES[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 function aplicaCfg(){
   document.title = cfg.nombre; document.documentElement.style.setProperty('--c', cfg.color || '#0f766e');
@@ -260,7 +260,8 @@ function detalle(folio){
       ${f('Tiempo de servicio', s.duracion != null ? fmtMin(s.duracion) : '')}${f('Abierto',s.abiertoEn ? fmtTs(s.abiertoEn) : '')}${f('Terminado por el técnico',s.terminadoEn ? fmtTs(s.terminadoEn) : '')}${f('Firmado por el cliente',s.estatus === 'Completado' && s.completadoEn ? fmtTs(s.completadoEn) : '')}</div>
     ${s.comentario ? `<div class="mt-3">${f('Comentario del técnico', s.comentario)}</div>` : ''}
     ${s.elec && Object.keys(s.elec).length ? `<div class="mt-3 text-xs text-slate-500">Partes eléctricas</div><div class="grid grid-cols-2 gap-x-3 text-sm">${Object.entries(s.elec).map(([k,v]) => `<div>${esc(k)}: <b>${esc(v)}</b></div>`).join('')}</div>${s.obsElec ? `<div class="mt-2 text-sm">Obs.: ${esc(s.obsElec)}</div>` : ''}` : ''}
-    <div class="flex gap-2 mt-4">${s.urlDoc && s.estatus === 'Completado' ? `<a class="btn" href="${esc(ver(s.urlDoc))}" target="_blank">Ver PDF</a>` : ''}<button class="btn btn2" data-a="cerrar">Cerrar</button></div>`);
+    ${s.chk && Object.keys(s.chk).length ? (() => { const v = Object.values(s.chk), n = e => v.filter(x => x === e).length; return `<div class="mt-3 text-xs text-slate-500">Inspección de la unidad</div><div class="text-sm">${s.odometro ? 'Odómetro: <b>' + esc(Number(s.odometro).toLocaleString('es-MX')) + ' km</b> · ' : ''}${s.combustible ? 'Combustible: <b>' + esc(s.combustible) + '</b> · ' : ''}${n('Bien')} bien · ${n('Regular')} regular · <b style="color:${n('Mal') ? '#b91c1c' : 'inherit'}">${n('Mal')} mal</b></div>${Object.entries(s.chk).filter(([k, x]) => x === 'Mal' || x === 'Regular').map(([k, x]) => `<div class="text-sm">${esc(k.replace('|', ' › '))}: <b>${esc(x)}</b></div>`).join('')}${s.obsCheck ? `<div class="mt-1 text-sm">Obs.: ${esc(s.obsCheck)}</div>` : ''}`; })() : ''}
+    <div class="flex gap-2 mt-4">${s.urlDoc && s.estatus === 'Completado' ? `<a class="btn" href="${esc(ver(s.urlDoc))}" target="_blank">Ver PDF</a>` : ''}${s.urlChk && s.estatus === 'Completado' ? `<a class="btn btn2" href="${esc(ver(s.urlChk))}" target="_blank">Ver checklist</a>` : ''}<button class="btn btn2" data-a="cerrar">Cerrar</button></div>`);
 }
 function exportaServ(){
   const rows = S.servicios.map(s => { const r = { Folio:s.folio, Técnico:s.tecnico, Fecha:s.fecha, Hora:s.hora, Motivo:s.motivo, Cliente:s.cliente, 'Razón social':s.razon, Lugar:s.lugar, Ciudad:s.ciudad, Estado:s.edo, Estatus:s.estatus, 'Tiempo (min)':s.duracion ?? '' };
@@ -344,6 +345,13 @@ function cuerpoForm(s){
         ${cfg.elecItems.map((it, i) => `<tr><td>${esc(it)}</td>${['Sí','No','N/A'].map(v => `<td class="text-center"><input type="radio" name="elec_${i}" value="${v}" style="width:20px;height:20px"></td>`).join('')}</tr>`).join('')}
       </tbody></table></div>
       <label class="l">Observaciones de partes eléctricas</label><textarea name="obsElec" class="inp" rows="2"></textarea>` : ''}
+    ${F.check ? `<h3 class="font-semibold mt-5">Inspección de la unidad</h3>
+      <div class="grid sm:grid-cols-2 gap-x-4"><div><label class="l">Odómetro (km)</label><input name="odometro" inputmode="numeric" class="inp" placeholder="Ej. 85400"></div>
+        <div><label class="l">Nivel de combustible</label><select name="combustible" class="inp"><option value="">Selecciona...</option>${(cfg.combustible || []).map(c => `<option>${esc(c)}</option>`).join('')}</select></div></div>
+      ${(cfg.checklist || []).map((g, gi) => `<div class="wrap mt-3"><table><thead><tr><th>${esc(g.g)}</th>${(cfg.estadosCheck || []).map(v => `<th class="text-center">${esc(v)}</th>`).join('')}</tr></thead><tbody>
+        ${g.items.map((it, ii) => `<tr><td>${esc(it)}</td>${(cfg.estadosCheck || []).map(v => `<td class="text-center"><input type="radio" name="chk_${gi}_${ii}" value="${v}" style="width:20px;height:20px"></td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>`).join('')}
+      <label class="l">Observaciones de la inspección (golpes, fallas, detalles)</label><textarea name="obsCheck" class="inp" rows="2"></textarea>` : ''}
     ${F.fotos ? `<h3 class="font-semibold mt-5">Fotos</h3>
       <div class="grid sm:grid-cols-2 gap-x-4">${foto('foto_adherible','Dispositivo (serie)')}${foto('foto_imei_camara','IMEI / SIM')}${foto('foto_vin','Placas / unidad')}${foto('foto_tablero','Instalación (puedes elegir varias)','multiple')}</div>` : ''}
     <h3 class="font-semibold mt-5">Firmas</h3>
@@ -399,7 +407,7 @@ async function generaOds(e){
     const d = await api('/generar-ods', { method:'POST', body:fd });
     await cargaServ(); capFolio = '';
     if (d.pendienteFirma) { linkModal(d.firmaUrl, d.folio, d.contacto, ''); }
-    else pdfModal(d.descargaUrl, d.folio, d.contacto, d.cliente);
+    else pdfModal(d.descargaUrl, d.folio, d.contacto, d.cliente, d.chkUrl);
     irTab('servicios');
   } catch(err){ toast(err.message, 1); btn.disabled = false; btn.textContent = 'Terminar y generar ODS'; }
 }
@@ -413,14 +421,14 @@ function linkModal(url, folio, contacto, cliente){
       ${wa ? `<a class="btn btnw" href="${esc(wa)}" target="_blank">Enviar por WhatsApp</a>` : '<span class="text-xs text-slate-500">No hay un teléfono válido del cliente para WhatsApp.</span>'}
       <button class="btn btn2" data-a="cerrar">Cerrar</button></div>`);
 }
-function pdfModal(url, folio, contacto, cliente){
-  const full = urlAbs(ver(url)), msg = `Hola${cliente ? ' ' + cliente : ''}, de ${cfg.empresa || cfg.nombre}: le compartimos su orden de servicio ${folio} ya firmada. Puede verla y descargarla aquí: ${full}`, wa = waLink(contacto, msg);
+function pdfModal(url, folio, contacto, cliente, chk){
+  const full = urlAbs(ver(url)), fullC = chk ? urlAbs(ver(chk)) : '', msg = `Hola${cliente ? ' ' + cliente : ''}, de ${cfg.empresa || cfg.nombre}: le compartimos su orden de servicio ${folio} ya firmada. Puede verla y descargarla aquí: ${full}` + (fullC ? `\nChecklist de inspección de la unidad: ${fullC}` : ''), wa = waLink(contacto, msg);
   modal(`<h3 class="font-bold text-lg">ODS completada</h3>
     <p class="text-sm text-slate-600 mt-1">Folio ${esc(folio)}. Este es el link para que el cliente vea y descargue su PDF:</p>
     <input id="lnk" class="inp mt-3" readonly value="${esc(full)}">
     <div class="flex flex-wrap gap-2 mt-3"><button class="btn" data-a="copiaLink">Copiar link</button>
       ${wa ? `<a class="btn btnw" href="${esc(wa)}" target="_blank">Enviar por WhatsApp</a>` : '<span class="text-xs text-slate-500">No hay un teléfono válido del cliente para WhatsApp.</span>'}
-      <a class="btn btn2" href="${esc(ver(url))}" target="_blank">Ver PDF</a><button class="btn btn2" data-a="cerrar">Cerrar</button></div>`);
+      <a class="btn btn2" href="${esc(ver(url))}" target="_blank">Ver PDF</a>${chk ? `<a class="btn btn2" href="${esc(ver(chk))}" target="_blank">Ver checklist</a>` : ''}<button class="btn btn2" data-a="cerrar">Cerrar</button></div>`);
 }
 async function linkFirma(folio){
   try { const d = await api('/servicios/' + encodeURIComponent(folio) + '/link-firma', { method:'POST' }); linkModal(d.firmaUrl, d.folio, d.contacto, d.cliente); } catch(e){ toast(e.message, 1); }
@@ -656,8 +664,8 @@ function pintaSaludTabla(full){
 }
 
 // ---------- Configuración (coordinador): identidad, logo y formatos de orden ----------
-const guardaId = () => { if ($('#c_nombre')) cfgId = { nombre:$('#c_nombre').value, empresa:$('#c_empresa').value, lema:$('#c_lema').value, color:$('#c_color').value, nota:$('#c_nota').value, arneses:$('#c_arn').value }; };
-const nuevoFormato = () => ({ id:'', nombre:'Nuevo formato', titulo:'', elec:false, logo:false, fotos:true,
+const guardaId = () => { if ($('#c_nombre')) cfgId = { nombre:$('#c_nombre').value, empresa:$('#c_empresa').value, lema:$('#c_lema').value, color:$('#c_color').value, nota:$('#c_nota').value, arneses:$('#c_arn').value, chkTxt:($('#c_chk') || {}).value }; };
+const nuevoFormato = () => ({ id:'', nombre:'Nuevo formato', titulo:'', elec:false, logo:false, fotos:true, check:true,
   campos: JSON.parse(JSON.stringify((cfg.formatos[0] || { campos:[] }).campos)).map(c => ({ ...c })) });
 function pintaConfig(){
   if (!cfgEdit) cfgEdit = JSON.parse(JSON.stringify(cfg.formatos));
@@ -674,6 +682,9 @@ function pintaConfig(){
     <div class="flex flex-wrap items-center gap-3 mt-3"><img src="/logo?${Date.now()}" onerror="this.style.display='none'" style="height:48px" alt="">
       <input id="c_logo" type="file" accept="image/png,image/jpeg" class="text-sm"><button class="btn btn2 btns" data-a="subeLogo">Subir logo</button><button class="btn btn2 btns" data-a="quitaLogo">Quitar logo</button></div>
     <p class="text-xs text-slate-500 mt-1">El logo es opcional. En cada formato eliges si se muestra o no en el PDF. Máximo 1 MB, PNG o JPG.</p></div>
+    <div class="card mb-4"><h2 class="font-bold text-lg">Checklist de la unidad</h2>
+      <p class="text-sm text-slate-600">Una línea por grupo, con los puntos separados por <b>|</b>. Ejemplo: <i>Luces: Delanteras | Traseras | Stop</i>. El técnico marca Bien / Regular / Mal / N/A y se genera un PDF aparte. Se activa o desactiva en cada formato.</p>
+      <textarea id="c_chk" class="inp mt-2" rows="8">${esc(X.chkTxt !== undefined ? X.chkTxt : (cfg.checklist || []).map(g => g.g + ': ' + g.items.join(' | ')).join('\n'))}</textarea></div>
     <div id="reglasCard">${reglasCard()}</div>
     <div id="fmts">${cfgEdit.map(fmtCard).join('')}</div>
     <div class="flex flex-wrap gap-2 mt-2"><button class="btn btn2" data-a="addFmt">+ Nuevo formato</button><button class="btn" data-a="guardaCfg">Guardar configuración</button></div>`;
@@ -702,6 +713,7 @@ function fmtCard(f, i){
     <div class="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-sm">
       <label><input type="checkbox" data-i="${i}" data-fp="logo" ${f.logo ? 'checked' : ''}> Mostrar logo en el PDF</label>
       <label><input type="checkbox" data-i="${i}" data-fp="elec" ${f.elec ? 'checked' : ''}> Incluir tabla de partes eléctricas</label>
+      <label><input type="checkbox" data-i="${i}" data-fp="check" ${f.check ? 'checked' : ''}> Incluir checklist de la unidad</label>
       <label><input type="checkbox" data-i="${i}" data-fp="fotos" ${f.fotos ? 'checked' : ''}> Incluir fotos</label></div>
     <div class="wrap mt-3"><table><thead><tr><th>Usar</th><th>Nombre del campo</th><th>Obligatorio</th></tr></thead><tbody>
       ${f.campos.map(c => `<tr><td><input type="checkbox" data-i="${i}" data-ck="${c.k}" data-cp="on" ${c.on ? 'checked' : ''}></td>
@@ -718,7 +730,7 @@ document.addEventListener('input', enlazaCfg); document.addEventListener('change
 async function guardaCfg(btn){
   btn.disabled = true;
   try {
-    const d = await api('/config', { method:'PUT', body:{ nombre:$('#c_nombre').value, empresa:$('#c_empresa').value, lema:$('#c_lema').value, color:$('#c_color').value, nota:$('#c_nota').value, arneses:$('#c_arn').value, formatos:cfgEdit } });
+    const d = await api('/config', { method:'PUT', body:{ nombre:$('#c_nombre').value, empresa:$('#c_empresa').value, lema:$('#c_lema').value, color:$('#c_color').value, nota:$('#c_nota').value, arneses:$('#c_arn').value, checklist:$('#c_chk').value, formatos:cfgEdit } });
     const nueva = await api('/config'); cfg = nueva; aplicaCfg(); cfgEdit = null; cfgId = null; toast('Configuración guardada'); pintaConfig();
   } catch(e){ toast(e.message, 1); } btn.disabled = false;
 }
@@ -743,7 +755,7 @@ const A = {
   capturar: async d => { capFolio = d.f; await abrirSi(d.f); irTab('capturar'); },
   creaServ: (d, e, b) => creaServ(b), importa: (d, e, b) => importa(b),
   borraServ: async d => { if (!confirm('¿Eliminar el servicio ' + d.f + '?')) return; try { await api('/servicios/' + encodeURIComponent(d.f), { method:'DELETE' }); await cargaServ(); pintaTablaServ(); toast('Eliminado'); } catch(e){ toast(e.message, 1); } },
-  enviaPdf: d => { const s = S.servicios.find(x => x.folio === d.f); if (s) pdfModal(s.urlDoc, s.folio, s.contacto, s.cliente); },
+  enviaPdf: d => { const s = S.servicios.find(x => x.folio === d.f); if (s) pdfModal(s.urlDoc, s.folio, s.contacto, s.cliente, s.urlChk); },
   limpiaSig: d => limpiaSig(d.s), linkFirma: d => linkFirma(d.f),
   copiaLink: async () => { const i = $('#lnk'); try { await navigator.clipboard.writeText(i.value); toast('Link copiado'); } catch(e){ i.select(); document.execCommand('copy'); toast('Link copiado'); } },
   guardaPass: async () => { try { await api('/yo/password', { method:'PUT', body:{ actual:$('#pa').value, nueva:$('#pn').value } }); toast('Contraseña actualizada'); if (me) me.debeCambiar = false; cerrar(); } catch(e){ toast(e.message, 1); } },

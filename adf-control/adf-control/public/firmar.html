@@ -64,7 +64,7 @@ async function carga(){
       const r = await fetch('/api/firma/' + encodeURIComponent(token), { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ firma:c.toDataURL('image/png'), nombre:$('#nom').value.trim() }) });
       const d = await r.json();
       if (!r.ok || d.exito === false) throw new Error(d.error || 'Error');
-      $('#app').innerHTML = '<div class="card ok"><div class="big">✅</div><h1>¡Listo, gracias!</h1><p class="sub">Tu firma quedó registrada y la orden de servicio quedó cerrada. Ya puedes cerrar esta página.</p></div>';
+      $('#app').innerHTML = '<div class="card ok"><div class="big">✅</div><h1>¡Listo, gracias!</h1><p class="sub">Tu firma quedó registrada y la orden de servicio quedó cerrada. Ya puedes cerrar esta página.</p>' + (d.descargaUrl ? '<p style="margin-top:16px"><a class="main" style="display:block;text-decoration:none;text-align:center;padding:13px 16px;border-radius:10px;color:#fff" href="' + d.descargaUrl + '" target="_blank">Descargar mi PDF</a></p>' : '') + (d.chkUrl ? '<p style="margin-top:10px"><a style="display:block;text-decoration:none;text-align:center;padding:12px 16px;border-radius:10px;border:1px solid #cbd5e1;color:#334155" href="' + d.chkUrl + '" target="_blank">Ver checklist de la unidad</a></p>' : '') + '</div>';
     } catch(e){ $('#err').textContent = e.message; b.disabled = false; b.textContent = 'Aceptar y firmar'; }
   };
 }
