@@ -66,7 +66,7 @@ function conf() {
     nombre: t(c.nombre) || APP_NAME, empresa: t(c.empresa) || EMPRESA,
     color: /^#[0-9a-fA-F]{6}$/.test(c.color || '') ? c.color : BRAND, lema: c.lema !== undefined ? t(c.lema) : TAGLINE,
     nota: c.nota !== undefined ? t(c.nota) : NOTA_PDF, arneses: Array.isArray(c.arneses) ? c.arneses : ARNESES,
-    formatos: L.normFormatos(c.formatos, { campos: c.campos, elec: c.elec !== undefined ? !!c.elec : USE_ELEC }), logo: !!c.logo };
+    formatos: L.normFormatos(c.formatos, { campos: c.campos, elec: c.elec !== undefined ? !!c.elec : USE_ELEC }), logo: !!c.logo, checklist: L.checkValid(c.checklist) };
 }
 
 // ---------- Cuenta inicial del coordinador ----------
@@ -128,10 +128,10 @@ app.get('/logo', async (req, res) => {
 app.get('/firmar/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'firmar.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/version', (req, res) => res.json({ version: '5.2', app: conf().nombre }));
+app.get('/api/version', (req, res) => res.json({ version: '5.3', app: conf().nombre }));
 const geotabCfg = () => process.env.GEOTAB_DATABASE && process.env.GEOTAB_USER && process.env.GEOTAB_PASSWORD
   ? { server: process.env.GEOTAB_SERVER, database: limpia(process.env.GEOTAB_DATABASE), user: limpia(process.env.GEOTAB_USER), password: limpia(process.env.GEOTAB_PASSWORD) } : null;
-app.get('/api/config', (req, res) => { const c = conf(); ok(res, { ...c, motivos: L.MOTIVOS, elecItems: L.ELEC, categorias: L.CATEGORIAS, geotab: !!geotabCfg() }); });
+app.get('/api/config', (req, res) => { const c = conf(); ok(res, { ...c, estadosCheck: L.ESTADOS_CHECK, combustible: L.COMBUSTIBLE, motivos: L.MOTIVOS, elecItems: L.ELEC, categorias: L.CATEGORIAS, geotab: !!geotabCfg() }); });
 app.put('/api/config', auth, rol('coord'), (req, res) => {
   const b = req.body, c = db.config = db.config || {};
   if (b.nombre !== undefined) c.nombre = t(b.nombre).slice(0, 60);
@@ -141,6 +141,7 @@ app.put('/api/config', auth, rol('coord'), (req, res) => {
   if (b.color !== undefined) { if (!/^#[0-9a-fA-F]{6}$/.test(t(b.color))) return bad(res, 400, 'Color no válido'); c.color = t(b.color); }
   if (b.arneses !== undefined) c.arneses = (Array.isArray(b.arneses) ? b.arneses : String(b.arneses).split('\n')).map(x => t(x).slice(0, 80)).filter(Boolean).slice(0, 40);
   if (b.formatos !== undefined) c.formatos = L.normFormatos(b.formatos, {});
+  if (b.checklist !== undefined) c.checklist = L.checkValid(b.checklist);
   save(); ok(res, { config: conf() });
 });
 app.post('/api/config/logo', auth, rol('coord'), up.single('logo'), async (req, res) => {
@@ -236,7 +237,7 @@ app.post('/api/servicios', auth, rol('coord'), (req, res) => {
   save(); ok(res);
 });
 async function borraArchivos(s) {
-  await blobDel(s.urlDoc ? s.urlDoc.replace('/ods/', '') : ''); await blobDel(s.firmaTecBlob);
+  await blobDel(s.urlDoc ? s.urlDoc.replace('/ods/', '') : ''); await blobDel(s.urlChk ? s.urlChk.replace('/ods/', '') : ''); await blobDel(s.firmaTecBlob);
   for (const m of (s.fotosMeta || [])) await blobDel(m.nombre);
 }
 app.delete('/api/servicios/:folio', auth, rol('coord'), async (req, res) => {
@@ -383,6 +384,37 @@ function row(d, a) {
   a.forEach((_, i) => { const x = 40 + i * (532 / a.length); d.moveTo(x, e + 1).lineTo(x + w - 8, e + 1).lineWidth(.4).strokeColor('#111').stroke(); });
   d.x = 40; d.y = e + 9;
 }
+const COL_EST = { 'Bien': '#15803d', 'Regular': '#b45309', 'Mal': '#b91c1c', 'N/A': '#64748b' };
+function bloqueCheck(d, s) {
+  if (!s.chk || !Object.keys(s.chk).length) return;
+  if (d.y > 600) d.addPage();
+  band(d, 'INSPECCIÓN DE LA UNIDAD');
+  const r = L.resumenCheck(s.chk);
+  row(d, [['Odómetro (km)', s.odometro ? Number(s.odometro).toLocaleString('es-MX') : ''], ['Nivel de combustible', s.combustible], ['Resultado', `${r.bien} bien · ${r.regular} regular · ${r.mal} mal`]]);
+  const grupos = []; Object.entries(s.chk).forEach(([k, v]) => { const i = k.indexOf('|'), g = k.slice(0, i), it = k.slice(i + 1); let o = grupos.find(x => x.g === g); if (!o) grupos.push(o = { g, l: [] }); o.l.push([it, v]); });
+  const rh = 14, cw = 266;
+  grupos.forEach(G => {
+    const filas = Math.ceil(G.l.length / 2);
+    if (d.y + 16 + rh * Math.min(filas, 2) > 735) d.addPage();
+    const y0 = d.y; d.rect(40, y0, 532, 14).fill('#e2e8f0'); d.fillColor('#111').font('Helvetica-Bold').fontSize(8.5).text(G.g, 46, y0 + 3.5, { lineBreak: false });
+    d.y = y0 + 14;
+    for (let i = 0; i < G.l.length; i += 2) {
+      if (d.y + rh > 740) d.addPage();
+      const y = d.y;
+      G.l.slice(i, i + 2).forEach(([it, v], j) => {
+        const x = 40 + j * cw;
+        if (v === 'Mal') d.rect(x, y, cw - 6, rh).fill('#fee2e2');
+        d.rect(x, y, cw - 6, rh).lineWidth(.4).strokeColor('#94a3b8').stroke();
+        d.font('Helvetica').fontSize(8).fillColor('#111').text(it, x + 4, y + 3.5, { width: cw - 70, lineBreak: false });
+        d.font('Helvetica-Bold').fontSize(8).fillColor(COL_EST[v] || '#111').text(v, x + cw - 62, y + 3.5, { width: 52, align: 'right', lineBreak: false });
+      });
+      d.y = y + rh;
+    }
+    d.y += 4;
+  });
+  d.x = 40;
+  if (s.obsCheck) row(d, [['Observaciones de la inspección', s.obsCheck]]);
+}
 function tablaElec(d, s) {
   if (!s.elec) return;
   if (d.y > 430) d.addPage();
@@ -434,6 +466,7 @@ function renderODS(d, s, files, b, C, logo, F) {
   if (s.arnes) row(d, [['Arnés utilizado', s.arnes]]);
   row(d, [['Comentario del técnico', s.comentario]]);
   tablaElec(d, s);
+  bloqueCheck(d, s);
 
   const fotos = [['Foto del dispositivo (serie)', files.foto_adherible], ['Foto del IMEI / SIM', files.foto_imei_camara], ['Foto de placas / unidad', files.foto_vin]]
     .map(([l, a]) => [l, a && a[0]]).concat(Object.keys(files).filter(k => !['foto_adherible', 'foto_imei_camara', 'foto_vin'].includes(k))
@@ -462,7 +495,7 @@ function renderODS(d, s, files, b, C, logo, F) {
   if (C.nota) { d.moveDown(0.5); d.font('Helvetica').fontSize(7.5).fillColor('#555').text(C.nota, 40, d.y, { width: 532 }); }
 }
 
-async function renderPdf(s, files, b) {
+async function creaPdf(s, pintar) {
   const C = conf(); let logo = null;
   try { logo = await blobGet('logo_marca'); } catch (e) {}
   if (!logo && fs.existsSync(LOGO)) logo = fs.readFileSync(LOGO);
@@ -470,7 +503,7 @@ async function renderPdf(s, files, b) {
     try {
       const doc = new PDFDocument({ size: 'LETTER', margin: 40, bufferPages: true }), chunks = [];
       doc.on('data', c => chunks.push(c)); doc.on('end', () => resolve(Buffer.concat(chunks))); doc.on('error', reject);
-      renderODS(doc, s, files, b, C, logo, fmtDe(s));
+      pintar(doc, C, logo);
       const rg = doc.bufferedPageRange(), gen = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
       for (let i = 0; i < rg.count; i++) {
         doc.switchToPage(i); const mb = doc.page.margins.bottom; doc.page.margins.bottom = 0;
@@ -481,6 +514,24 @@ async function renderPdf(s, files, b) {
     } catch (e) { reject(e); }
   });
 }
+const renderPdf = (s, files, b) => creaPdf(s, (doc, C, logo) => renderODS(doc, s, files, b, C, logo, fmtDe(s)));
+// PDF aparte: solo la inspección de la unidad
+function renderChk(d, s, C, logo, F) {
+  CY = C.color;
+  if (F.logo && logo) { try { d.image(logo, 40, 26, { height: 38 }); } catch (e) {} }
+  d.fillColor('#111').font('Helvetica-Bold').fontSize(16).text('Checklist de inspección de la unidad', 40, 32, { width: 532, align: 'center' });
+  if (C.empresa) d.font('Helvetica').fontSize(9).fillColor('#666').text(C.empresa, 40, 53, { width: 532, align: 'center' });
+  d.moveTo(40, 69).lineTo(572, 69).lineWidth(1.2).strokeColor(CY).stroke();
+  d.y = 78; d.x = 40;
+  row(d, [['Folio', s.folio], ['Fecha de visita', `${s.fecha} ${s.hora || ''}`], ['Técnico', s.tecnico]]);
+  row(d, [['Cliente', s.cliente], ['Placas', s.placas], ['Número económico', s.economico]]);
+  row(d, [['Vehículo', [s.vMarca, s.vModelo, s.vAnio].filter(Boolean).join(' ')], ['VIN', s.vin]]);
+  bloqueCheck(d, s);
+  if (d.y > 640) d.addPage(); d.y += 24;
+  const y = d.y; d.moveTo(40, y + 40).lineTo(280, y + 40).lineWidth(.5).strokeColor('#111').stroke();
+  d.font('Helvetica').fontSize(10).fillColor('#111').text(t(s.tecnico), 40, y + 44, { width: 240 }); d.fontSize(7.5).fillColor('#666').text('Técnico que realizó la inspección', 40, y + 58, { width: 240 });
+  if (C.nota) d.font('Helvetica').fontSize(7.5).fillColor('#555').text(C.nota, 40, y + 90, { width: 532 });
+}
 const agrupa = l => (l || []).reduce((o, f) => ((o[f.fieldname] = o[f.fieldname] || []).push(f), o), {});
 const uidDe = s => s.uid || (s.uid = crypto.randomBytes(6).toString('hex'));
 async function cierraConPdf(s, files, b) {
@@ -488,6 +539,11 @@ async function cierraConPdf(s, files, b) {
   const nombre = `ODS_${s.folio.replace(/[^\w-]/g, '')}_${crypto.randomBytes(12).toString('hex')}.pdf`;
   await blobPut(nombre, buf);
   await blobDel(s.urlDoc ? s.urlDoc.replace('/ods/', '') : '');
+  await blobDel(s.urlChk ? s.urlChk.replace('/ods/', '') : ''); s.urlChk = '';
+  if (s.chk && Object.keys(s.chk).length) {
+    const nc = `CHK_${s.folio.replace(/[^\w-]/g, '')}_${crypto.randomBytes(12).toString('hex')}.pdf`;
+    await blobPut(nc, await creaPdf(s, (doc, C, logo) => renderChk(doc, s, C, logo, fmtDe(s)))); s.urlChk = '/ods/' + nc;
+  }
   s.urlDoc = '/ods/' + nombre; s.estatus = 'Completado'; s.completadoEn = Date.now();
   if (!s.terminadoEn) s.terminadoEn = s.completadoEn;
 }
@@ -511,12 +567,16 @@ app.post('/api/generar-ods', auth, rol('tec', 'coord'), up.any(), async (req, re
     s.vMarca = t(b.vMarca).slice(0, 40); s.vModelo = t(b.vModelo).slice(0, 40); s.vAnio = parseInt(b.vAnio, 10) || ''; s.vTipo = t(b.vTipo).slice(0, 60);
     if (F.elec) { const e = {}; ELEC.forEach((it, i) => { const v = t(b['elec_' + i]); if (['Sí', 'No', 'N/A'].includes(v)) e[it] = v; }); s.elec = e; s.obsElec = t(b.obsElec); }
     else { delete s.elec; delete s.obsElec; }
+    if (F.check) {
+      const chk = {}; C.checklist.forEach((g, gi) => g.items.forEach((it, ii) => { const v = t(b[`chk_${gi}_${ii}`]); if (L.ESTADOS_CHECK.includes(v)) chk[g.g + '|' + it] = v; }));
+      s.chk = chk; s.obsCheck = t(b.obsCheck).slice(0, 600); s.odometro = t(b.odometro).replace(/[^\d]/g, '').slice(0, 9); s.combustible = L.COMBUSTIBLE.includes(t(b.combustible)) ? t(b.combustible) : '';
+    } else { delete s.chk; delete s.obsCheck; delete s.odometro; delete s.combustible; }
     s.terminadoEn = Date.now();
     const files = agrupa(req.files), firmaC = dataImg(b.firmaCliente);
     await borraArchivos({ fotosMeta: s.fotosMeta, firmaTecBlob: s.firmaTecBlob }); s.fotosMeta = []; s.firmaTecBlob = '';
     if (firmaC) {
       await cierraConPdf(s, files, b); s.firmaToken = null; delete s.firmaInfo;
-      save(); return ok(res, { descargaUrl: s.urlDoc, folio: s.folio, contacto: s.contacto, cliente: s.cliente });
+      save(); return ok(res, { descargaUrl: s.urlDoc, chkUrl: s.urlChk || '', folio: s.folio, contacto: s.contacto, cliente: s.cliente });
     }
     // El cliente no está: se guardan fotos y firma del técnico, y se genera un link para que firme desde su celular
     const uid = uidDe(s); let n = 0; s.fotosMeta = [];
@@ -568,7 +628,7 @@ app.post('/api/firma/:token', limite, async (req, res) => {
     await cierraConPdf(s, files, { firmaCliente: req.body.firma, nombreCliente: nombre, firmaTecnico: ft ? 'data:image/png;base64,' + ft.toString('base64') : '' });
     s.nombreCliente = nombre; s.firmaToken = null; s.firmaExp = 0;
     await borraArchivos({ fotosMeta: s.fotosMeta, firmaTecBlob: s.firmaTecBlob }); s.fotosMeta = []; s.firmaTecBlob = '';
-    s.firmando = false; save(); ok(res, { descargaUrl: s.urlDoc });
+    s.firmando = false; save(); ok(res, { descargaUrl: s.urlDoc, chkUrl: s.urlChk || '' });
   } catch (e) {
     console.error(e); s.firmando = false; s.firmaInfo = respaldo.firmaInfo; s.urlDoc = respaldo.urlDoc; s.estatus = 'Pendiente de firma';
     bad(res, 500, 'No se pudo guardar la firma, inténtalo de nuevo');
@@ -611,6 +671,10 @@ async function sembrarDemo() {
   db.demoListo = true; save();
 }
 
+cargar().then(async () => {
+  sembrar(); await sembrarDemo();
+  app.listen(PORT, () => console.log(conf().nombre + ' en puerto ' + PORT + (USE_PG ? ' (datos en base de datos externa)' : ' (datos en archivo local)') + (geotabCfg() ? ' · Geotab configurado' : '')));
+}).catch(e => { console.error('No se pudo iniciar:', e.message); process.exit(1); });
 cargar().then(async () => {
   sembrar(); await sembrarDemo();
   app.listen(PORT, () => console.log(conf().nombre + ' en puerto ' + PORT + (USE_PG ? ' (datos en base de datos externa)' : ' (datos en archivo local)') + (geotabCfg() ? ' · Geotab configurado' : '')));
