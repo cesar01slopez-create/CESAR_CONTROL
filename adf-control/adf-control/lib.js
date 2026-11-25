@@ -99,8 +99,33 @@ function normFormatos(arr, base = {}, rnd = () => Math.random().toString(16).sli
     let id = String((f && f.id) || '').replace(/[^\w-]/g, '').slice(0, 20) || rnd(); while (ids.has(id)) id = rnd(); ids.add(id);
     const nombre = String((f && f.nombre) || '').trim().slice(0, 40) || 'Formato ' + (i + 1);
     return { id, nombre, titulo: String((f && f.titulo) || '').trim().slice(0, 60) || nombre, campos: mezclaCampos(f && f.campos),
-      elec: !!(f && f.elec), logo: !!(f && f.logo), fotos: !(f && f.fotos === false) };
+      elec: !!(f && f.elec), logo: !!(f && f.logo), fotos: !(f && f.fotos === false), check: !(f && f.check === false) };
   });
+}
+
+
+// ---------- Checklist de inspección de la unidad ----------
+const ESTADOS_CHECK = ['Bien', 'Regular', 'Mal', 'N/A'];
+const COMBUSTIBLE = ['Reserva', '1/4', '1/2', '3/4', 'Lleno'];
+const CHECK_GRUPOS = [
+  { g: 'Luces', items: ['Luces delanteras (bajas)', 'Luces altas', 'Luces traseras', 'Stop (freno)', 'Direccionales', 'Intermitentes de emergencia', 'Luz de reversa'] },
+  { g: 'Neumáticos', items: ['Delantero izquierdo', 'Delantero derecho', 'Trasero izquierdo', 'Trasero derecho', 'Llanta de refacción'] },
+  { g: 'Carrocería y cristales', items: ['Parabrisas', 'Espejos', 'Limpiaparabrisas', 'Defensas y salpicaderas', 'Golpes o rayones visibles'] },
+  { g: 'Interior', items: ['Tablero (sin testigos encendidos)', 'Claxon', 'Cinturones de seguridad', 'Aire acondicionado', 'Asientos y tapicería'] },
+  { g: 'Mecánico y fluidos', items: ['Nivel de aceite', 'Anticongelante', 'Frenos', 'Batería', 'Fugas visibles'] },
+  { g: 'Seguridad y herramienta', items: ['Extintor', 'Triángulos de seguridad', 'Botiquín', 'Gato y herramienta'] }];
+// Acepta una lista de grupos o texto con una línea por grupo: "Luces: Delanteras | Traseras | Stop"
+function checkValid(x) {
+  let g = x;
+  if (typeof x === 'string') g = x.split('\n').map(l => { const i = l.indexOf(':'); return i < 0 ? null : { g: l.slice(0, i), items: l.slice(i + 1).split('|') }; }).filter(Boolean);
+  if (!Array.isArray(g)) return CHECK_GRUPOS.map(a => ({ g: a.g, items: a.items.slice() }));
+  return g.map(a => ({ g: String((a && a.g) || '').trim().slice(0, 40), items: (Array.isArray(a && a.items) ? a.items : []).map(i => String(i).trim().slice(0, 60)).filter(Boolean).slice(0, 30) }))
+    .filter(a => a.g && a.items.length).slice(0, 12);
+}
+const checkTexto = grupos => grupos.map(a => a.g + ': ' + a.items.join(' | ')).join('\n');
+function resumenCheck(chk) {
+  const v = Object.values(chk || {}), c = e => v.filter(x => x === e).length;
+  return { bien: c('Bien'), regular: c('Regular'), mal: c('Mal'), na: c('N/A'), total: v.length };
 }
 
 // ---------- Agenda, historial por unidad y avisos ----------
@@ -228,4 +253,4 @@ function avisosGeotab(v) {
   return a;
 }
 
-module.exports = { ARNESES_GEOTAB, guiaGeotab, avisosGeotab, vinNormal, vinFormato, vinCheck, vinAnio, vinPais, categoriaVeh, CAT_VEH, parseVpic, reglasValidas, sugiereArnes, sinAc, CAMPOS_DEF, mezclaCampos, normFormatos, agenda, unidades, claveUnidad, waLink, MOTIVOS, ELEC, CATEGORIAS, visitaTs, rango, minutos, fmtMin, stats, kpi, turno, categoria, local };
+module.exports = { ESTADOS_CHECK, COMBUSTIBLE, CHECK_GRUPOS, checkValid, checkTexto, resumenCheck, ARNESES_GEOTAB, guiaGeotab, avisosGeotab, vinNormal, vinFormato, vinCheck, vinAnio, vinPais, categoriaVeh, CAT_VEH, parseVpic, reglasValidas, sugiereArnes, sinAc, CAMPOS_DEF, mezclaCampos, normFormatos, agenda, unidades, claveUnidad, waLink, MOTIVOS, ELEC, CATEGORIAS, visitaTs, rango, minutos, fmtMin, stats, kpi, turno, categoria, local };
